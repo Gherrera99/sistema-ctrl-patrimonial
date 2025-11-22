@@ -1,0 +1,9 @@
+/* web/src/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* utilidades que ya usas en tus vistas */
+.btn { @apply bg-emerald-600 text-white px-3 py-2 rounded hover:bg-emerald-700; }
+.link { @apply text-emerald-700 hover:underline; }
+.input { @apply w-full border rounded px-3 py-2 outline-none focus:ring; }

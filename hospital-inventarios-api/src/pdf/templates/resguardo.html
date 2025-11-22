@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><title>Resguardo</title>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 12px; }
+  .title { text-align:center; font-weight:700; font-size:16px; margin-bottom:6px; position: relative; }
+  .qr { position:absolute; right:0; top:0; }
+  .box { border:1px solid #000; padding:8px; margin-bottom:6px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
+  .label { font-weight:700; }
+</style></head>
+<body>
+  <div class="title">{{TITULO}} <img class="qr" src="{{QR}}" alt="QR"></div>
+  <div class="box"><span class="label">DIRECCIÓN/DEPENDENCIA:</span><br>{{DIRECCION}}</div>
+  <div class="grid">
+    <div class="box"><span class="label">DESCRIPCIÓN DEL BIEN:</span> {{NOMBRE}}</div>
+    <div class="box"><span class="label">NO. DE FACTURA:</span> {{NO_FACTURA}}</div>
+    <div class="box"><span class="label">FECHA:</span> {{FECHA}}</div>
+    <div class="box"><span class="label">NO. DE SERIE:</span> {{NO_SERIE}}</div>
+    <div class="box"><span class="label">UBICACIÓN FÍSICA:</span> {{UBICACION}}</div>
+    <div class="box"><span class="label">MODELO:</span> {{MODELO}}</div>
+    <div class="box"><span class="label">NO. DE INVENTARIO:</span> {{NO_INVENTARIO}}</div>
+    <div class="box"><span class="label">MARCA:</span> {{MARCA}}</div>
+    <div class="box"><span class="label">ESTADO FÍSICO DEL BIEN:</span> {{ESTADO}}</div>
+    <div class="box"><span class="label">OBSERVACIONES:</span> {{OBSERVACIONES}}</div>
+  </div>
+  <div class="box"><span class="label">FECHA DE ENTREGA DEL BIEN:</span> {{FECHA_ENTREGA}}</div>
+  <div class="box">
+    <div class="label">FIRMAS:</div>
+    <div>NOMBRE DEL RESPONSABLE DEL BIEN Y PUESTO</div>
+    <div style="margin-top:6px;">{{AUT_TITULO}}</div>
+    <div>NOMBRE: {{AUT_NOMBRE}}</div>
+    <div>ENTIDAD: {{AUT_ENTIDAD}}</div>
+    <div style="margin-top:8px;">RESPONSABLE DEL SEGUIMIENTO Y CONTROL</div>
+    <div style="height:40px;border-bottom:1px solid #000;width:200px;margin-top:12px;">FIRMA</div>
+    <div style="margin-top:8px;">ORIGINAL: RESPONSABLE DEL CONTROL PATRIMONIAL &nbsp;&nbsp; COPIA: RESPONSABLE DEL BIEN</div>
+  </div>
+</body></html>
