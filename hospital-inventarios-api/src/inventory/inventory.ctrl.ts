@@ -2,6 +2,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../prisma.js';
 import { TipoBien } from '@prisma/client';
+import { MovimientosService } from '../movimientos/movimientos.service.js';
+import { TipoMovimiento } from '@prisma/client';
+
 
 /** Util: parsea fechas (yyyy-mm-dd ó dd/mm/yyyy) a Date o undefined */
 function asDate(v?: string | null): Date | undefined {
@@ -61,24 +64,27 @@ export async function create(req: Request, res: Response) {
   // 👀 Log para depurar qué llega realmente
   console.log('[inventario.create] body =', req.body);
 
-  const {
-    no_inventario,
-    nombre,
-    responsable,
-    rfc,
-    no_factura,
-    fecha_adjudicacion,
-    modelo,
-    marca,
-    no_serie,
-    observaciones,
-    fecha_entrega,
-    estadoId,      // number
-    ubicacionId,   // number
-    tipo,          // 'ADMINISTRATIVO' | 'MEDICO'
-  } = req.body || {};
+    const {
+        no_inventario,
+        nombre,
+        responsable,
+        rfc,
+        no_factura,
+        fecha_adjudicacion,
+        modelo,
+        marca,
+        no_serie,
+        observaciones,
+        fecha_entrega,
+        estadoId,
+        ubicacionId,
+        tipo,
+        costo_adquisicion,
+        proveedorId,
+        tipoPropiedad,
+    } = req.body || {};
 
-  if (!no_inventario || !nombre) {
+    if (!no_inventario || !nombre) {
     return res.status(400).json({ error: 'no_inventario y nombre son obligatorios' });
   }
 
@@ -106,6 +112,17 @@ export async function create(req: Request, res: Response) {
 
         // quién creó (si manejas usuarios)
         ...(req as any).user?.id ? { createdById: Number((req as any).user.id) } : {},
+
+        costo_adquisicion: costo_adquisicion ? Number(costo_adquisicion) : null,
+
+        tipoPropiedad: tipoPropiedad
+          ? (String(tipoPropiedad).toUpperCase() as any)
+          : undefined,
+
+        ...(proveedorId
+           ? { proveedor: { connect: { id: Number(proveedorId) } } }
+           : {}),
+
       },
       include: {
         estado: { select: { id: true, code: true, label: true, orden: true } },
@@ -122,64 +139,158 @@ export async function create(req: Request, res: Response) {
 
 /** PUT /api/inventario/:id */
 export async function update(req: Request, res: Response) {
-  const id = Number(req.params.id);
-  const {
-    no_inventario,
-    nombre,
-    responsable,
-    rfc,
-    no_factura,
-    fecha_adjudicacion,
-    modelo,
-    marca,
-    no_serie,
-    observaciones,
-    fecha_entrega,
-    estadoId,
-    ubicacionId,
-    tipo,
-  } = req.body || {};
+    const id = Number(req.params.id);
 
-  try {
-    const updated = await prisma.inventoryItem.update({
-      where: { id },
-      data: {
-        ...(no_inventario !== undefined ? { no_inventario: String(no_inventario) } : {}),
-        ...(nombre !== undefined ? { nombre: String(nombre) } : {}),
-        ...(responsable !== undefined ? { responsable: String(responsable) } : {}),
-        ...(rfc !== undefined ? { rfc: String(rfc) } : {}),
-        ...(no_factura !== undefined ? { no_factura: no_factura ? String(no_factura) : null } : {}),
-        ...(fecha_adjudicacion !== undefined ? { fecha_adjudicacion: asDate(fecha_adjudicacion) } : {}),
-        ...(modelo !== undefined ? { modelo: modelo || null } : {}),
-        ...(marca !== undefined ? { marca: marca || null } : {}),
-        ...(no_serie !== undefined ? { no_serie: no_serie || null } : {}),
-        ...(observaciones !== undefined ? { observaciones: observaciones || null } : {}),
-        ...(fecha_entrega !== undefined ? { fecha_entrega: asDate(fecha_entrega) } : {}),
-        ...(tipo !== undefined ? { tipo: (String(tipo).toUpperCase() as TipoBien) } : {}),
+    const {
+        no_inventario,
+        nombre,
+        responsable,
+        rfc,
+        no_factura,
+        fecha_adjudicacion,
+        modelo,
+        marca,
+        no_serie,
+        observaciones,
+        fecha_entrega,
 
-        ...(estadoId !== undefined
-            ? estadoId
-                ? { estado: { connect: { id: Number(estadoId) } } }
-                : { estado: { disconnect: true } }
-            : {}),
+        // 🎯 nuevos campos
+        costo_adquisicion,
+        tipoPropiedad,
+        proveedorId,
 
-        ...(ubicacionId !== undefined
-            ? ubicacionId
-                ? { ubicacion: { connect: { id: Number(ubicacionId) } } }
-                : { ubicacion: { disconnect: true } }
-            : {}),
-      },
-      include: {
-        estado: { select: { id: true, code: true, label: true, orden: true } },
-        ubicacion: { select: { id: true, code: true, nombre: true, orden: true } },
-      },
-    });
+        estadoId,
+        ubicacionId,
+        tipo,
+    } = req.body || {};
 
-    res.json(updated);
-  } catch (e: any) {
-    console.error('[inventario.update] error', e);
-    res.status(400).json({ error: 'No se pudo actualizar', detail: e?.message || String(e) });
-  }
+
+    try {
+        // 1) Cargamos la versión ANTERIOR del bien
+        const before = await prisma.inventoryItem.findUnique({
+            where: { id },
+            include: {
+                ubicacion: true,
+                estado: true,
+            }
+        });
+
+        if (!before) {
+            return res.status(404).json({ error: 'No encontrado' });
+        }
+
+        // 2) Actualizamos el bien
+        const updated = await prisma.inventoryItem.update({
+            where: { id },
+            data: {
+                ...(no_inventario !== undefined ? { no_inventario: String(no_inventario) } : {}),
+                ...(nombre !== undefined ? { nombre: String(nombre) } : {}),
+                ...(responsable !== undefined ? { responsable: String(responsable) } : {}),
+                ...(rfc !== undefined ? { rfc: String(rfc) } : {}),
+                ...(no_factura !== undefined ? { no_factura: no_factura ? String(no_factura) : null } : {}),
+                ...(fecha_adjudicacion !== undefined ? { fecha_adjudicacion: asDate(fecha_adjudicacion) } : {}),
+                ...(modelo !== undefined ? { modelo: modelo || null } : {}),
+                ...(marca !== undefined ? { marca: marca || null } : {}),
+                ...(no_serie !== undefined ? { no_serie: no_serie || null } : {}),
+                ...(observaciones !== undefined ? { observaciones: observaciones || null } : {}),
+                ...(fecha_entrega !== undefined ? { fecha_entrega: asDate(fecha_entrega) } : {}),
+                ...(tipo !== undefined ? { tipo: (String(tipo).toUpperCase() as TipoBien) } : {}),
+
+                ...(estadoId !== undefined
+                    ? estadoId
+                        ? { estado: { connect: { id: Number(estadoId) } } }
+                        : { estado: { disconnect: true } }
+                    : {}),
+
+                ...(ubicacionId !== undefined
+                    ? ubicacionId
+                        ? { ubicacion: { connect: { id: Number(ubicacionId) } } }
+                        : { ubicacion: { disconnect: true } }
+                    : {}),
+
+                ...(costo_adquisicion !== undefined
+                    ? { costo_adquisicion: Number(costo_adquisicion) }
+                    : {}),
+
+                ...(tipoPropiedad !== undefined
+                    ? { tipoPropiedad: String(tipoPropiedad).toUpperCase() as any }
+                    : {}),
+
+                ...(proveedorId !== undefined
+                    ? proveedorId
+                        ? { proveedor: { connect: { id: Number(proveedorId) } } }
+                        : { proveedor: { disconnect: true } }
+                    : {}),
+
+            },
+            include: {
+                estado: true,
+                ubicacion: true,
+            },
+        });
+
+        // 3) REGISTRO AUTOMÁTICO DE MOVIMIENTOS
+        const userId = (req as any).user?.id;
+        const bienId = updated.id;
+
+        // --- CAMBIO DE RESPONSABLE ---
+        if (before.responsable !== updated.responsable) {
+            await MovimientosService.registrarMovimiento({
+                bienId,
+                usuarioId: userId,
+                tipo: "CAMBIO_RESPONSABLE",
+                motivo: "Cambio de responsable",
+                responsableAntes: before.responsable || "",
+                responsableDespues: updated.responsable || "",
+                ubicacionAntes: "",
+                ubicacionDespues: "",
+            });
+        }
+
+        // --- CAMBIO DE UBICACIÓN ---
+        if (before.ubicacionId !== updated.ubicacionId) {
+            // recuperar nombres si existen
+            const ubicacionAntes = before.ubicacion?.nombre || "";
+            const ubicacionDespues = updated.ubicacion?.nombre || "";
+
+            await MovimientosService.registrarMovimiento({
+                bienId,
+                usuarioId: userId,
+                tipo: "CAMBIO_UBICACION",
+                motivo: "Cambio de ubicación",
+                responsableAntes: "",
+                responsableDespues: "",
+                ubicacionAntes,
+                ubicacionDespues,
+            });
+        }
+
+        // --- CAMBIOS GENERALES DEL BIEN ---
+        if (
+            before.nombre !== updated.nombre ||
+            before.modelo !== updated.modelo ||
+            before.marca !== updated.marca ||
+            before.no_serie !== updated.no_serie ||
+            before.observaciones !== updated.observaciones
+        ) {
+            await MovimientosService.registrarMovimiento({
+                bienId,
+                usuarioId: userId,
+                tipo: "OTRO",
+                motivo: "Actualización de información del bien",
+                responsableAntes: "",
+                responsableDespues: "",
+                ubicacionAntes: "",
+                ubicacionDespues: "",
+            });
+        }
+
+        return res.json(updated);
+
+    } catch (e: any) {
+        console.error('[inventario.update] error', e);
+        res.status(400).json({ error: 'No se pudo actualizar', detail: e?.message || String(e) });
+    }
 }
 
 /** DELETE /api/inventario/:id */

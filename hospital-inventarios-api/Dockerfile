@@ -1,24 +1,24 @@
-# hospital-inventarios-api/Dockerfile
-FROM ghcr.io/puppeteer/puppeteer:latest
+FROM node:18
+
 WORKDIR /app
 
-# 1) deps
+# 1. Copiar dependencias
 COPY package*.json ./
-RUN npm i
 
-# 2) prisma (schema + generate)
-COPY prisma ./prisma
+# 2. Instalar dependencias
+RUN npm install
+
+# 3. Copiar código fuente
+COPY . .
+
+# 4. Generar cliente Prisma
 RUN npx prisma generate
 
-# 3) código
-COPY tsconfig.json ./
-COPY src ./src
-
-# 4) build
+# 5. Compilar TypeScript
 RUN npm run build
 
-ENV PORT=8000
+# 6. Exponer puerto
 EXPOSE 8000
 
-# 5) al arrancar el contenedor aplica migraciones y levanta
-CMD sh -lc "npx prisma migrate deploy || npx prisma db push; node dist/server.js"
+# 7. Ejecutar en modo producción
+CMD ["npm", "start"]

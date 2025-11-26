@@ -61,6 +61,7 @@
           <a :href="`/api/resguardo/${it.id}`" target="_blank" rel="noopener" class="text-green-700 hover:underline">
             Resguardo PDF
           </a>
+          <button class="text-green-700 hover:underline" @click="abrirMovimientos(it.id)">Historial</button>
           <button class="text-red-700 hover:underline" @click="eliminar(it)">Eliminar</button> <!-- 👈 nuevo -->
         </td>
       </tr>
@@ -70,11 +71,21 @@
       </tbody>
     </table>
   </div>
+
+  <MovimientosModal
+      :open="modalMovimientos"
+      :bienId="bienSeleccionado"
+      @close="modalMovimientos = false"
+  />
+
+
 </template>
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue';
 import axios from 'axios';
+import MovimientosModal from "../components/MovimientosModal.vue";
+
 axios.defaults.withCredentials = true;
 
 const API = '/api';
@@ -82,6 +93,9 @@ const API = '/api';
 const items = ref<any[]>([]);
 const ubicaciones = ref<any[]>([]);
 const estados = ref<any[]>([]);
+
+const modalMovimientos = ref(false);
+const bienSeleccionado = ref(null);
 
 const filtros = reactive({
   nombre: '',
@@ -100,6 +114,11 @@ async function cargar() {
 
   const { data } = await axios.get(API + '/inventario', { params });
   items.value = Array.isArray(data) ? data : [];
+}
+
+function abrirMovimientos(id) {
+  bienSeleccionado.value = id;
+  modalMovimientos.value = true;
 }
 
 async function eliminar(it: any) {

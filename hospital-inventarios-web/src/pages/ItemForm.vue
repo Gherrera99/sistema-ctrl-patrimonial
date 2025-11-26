@@ -76,6 +76,41 @@
         </select>
       </div>
 
+      <!-- Costo de adquisición -->
+      <div>
+        <label class="label">Costo de adquisición</label>
+        <input
+            class="input"
+            type="number"
+            min="0"
+            step="0.01"
+            v-model="f.costoAdquisicion"
+            placeholder="Ej. 15000"
+        />
+      </div>
+
+      <!-- Tipo de Propiedad -->
+      <div>
+        <label class="label">Tipo de propiedad</label>
+        <select class="input" v-model="f.tipoPropiedad">
+          <option disabled value="">Selecciona tipo</option>
+          <option value="CONTABLE">Contable</option>
+          <option value="PROPIO">Propio</option>
+          <option value="COMODATO">Comodato</option>
+        </select>
+      </div>
+
+      <!-- Proveedor -->
+      <div>
+        <label class="label">Proveedor</label>
+        <select class="input" v-model.number="f.proveedorId">
+          <option disabled value="">Selecciona proveedor</option>
+          <option v-for="p in proveedores" :key="p.id" :value="p.id">
+            {{ p.nombre }}
+          </option>
+        </select>
+      </div>
+
       <!-- Observaciones (full width) -->
       <div class="md:col-span-2">
         <label class="label">Observaciones</label>
@@ -127,19 +162,28 @@ const f = reactive({
   responsable: '',
   rfc: '',
   noFactura: '',
-  fechaAdjudicacion: '', // 'YYYY-MM-DD'
+  fechaAdjudicacion: '',
   modelo: '',
   marca: '',
   noSerie: '',
   observaciones: '',
-  fechaEntrega: '',      // 'YYYY-MM-DD'
+  fechaEntrega: '',
   tipoBien: 'ADMINISTRATIVO',
-  estadoId: null as number | null,
-  ubicacionId: null as number | null,
+  estadoId: null,
+  ubicacionId: null,
+
+  // Nuevos campos
+  costoAdquisicion: '',
+  tipoPropiedad: '',
+  proveedorId: null,
 });
+
 
 const ubicaciones = reactive<Ubicacion[]>([]);
 const estados     = reactive<Estado[]>([]);
+
+const proveedores = reactive<any[]>([]);
+
 
 // helpers
 function toISODate(d: string | null | undefined) {
@@ -148,12 +192,14 @@ function toISODate(d: string | null | undefined) {
 }
 
 async function loadCatalogs(){
-  const [u, e] = await Promise.all([
+  const [u, e, p] = await Promise.all([
     axios.get<Ubicacion[]>(`${API}/ubicaciones`),
     axios.get<Estado[]>(`${API}/estados-fisicos`),
+    axios.get(`${API}/proveedores`),
   ]);
   ubicaciones.splice(0, ubicaciones.length, ...u.data);
   estados.splice(0, estados.length, ...e.data);
+  proveedores.splice(0, proveedores.length, ...p.data);
 }
 
 async function loadIfEdit(){
@@ -174,6 +220,9 @@ async function loadIfEdit(){
   f.tipoBien           = data.tipo ?? 'ADMINISTRATIVO';
   f.estadoId           = data.estadoId ?? null;
   f.ubicacionId        = data.ubicacionId ?? null;
+  f.costoAdquisicion = data.costo_adquisicion ?? '';
+  f.tipoPropiedad    = data.tipoPropiedad ?? '';
+  f.proveedorId      = data.proveedorId ?? null;
 }
 
 async function onSubmit(){
@@ -195,11 +244,17 @@ async function onSubmit(){
     no_serie:           f.noSerie.trim() || null,
     observaciones:      f.observaciones.trim() || null,
     fecha_entrega:      toISODate(f.fechaEntrega),
-    // 🔴 clave correcta para la API:
-    tipo:               f.tipoBien,      // 'ADMINISTRATIVO' | 'MEDICO'
+
+    tipo:               f.tipoBien,
     estadoId:           f.estadoId ?? null,
     ubicacionId:        f.ubicacionId ?? null,
+
+    // Nuevos campos
+    costo_adquisicion:  f.costoAdquisicion ? Number(f.costoAdquisicion) : null,
+    tipoPropiedad:      f.tipoPropiedad || null,
+    proveedorId:        f.proveedorId ?? null,
   };
+
 
   if (isEdit.value) {
     await axios.put(`${API}/inventario/${route.params.id}`, payload);

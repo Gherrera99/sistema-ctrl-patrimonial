@@ -27,30 +27,25 @@ services:
       - NODE_ENV=production
       - PORT=8000
       - ALLOW_ORIGIN=http://localhost:8081
-
-      # ====== NUEVO: cabecera y logos del PDF ======
       - PDF_HEADER_ENTITY=HOSPITAL DE LA AMISTAD
       - PDF_HEADER_ADDRESS=CALLE 60 SUR S/N COL SAN JOSE TECOH X ANILLO PERIFERICO SAN JOSE TECOH PONIENTE
       - PDF_LOGO_LEFT=/app/assets/logo_left.png
       - PDF_LOGO_RIGHT=/app/assets/logo_right.png
-
-      # Firma “Responsable del seguimiento y control”
       - PDF_CONTROL_NAME=C. ABIB ALEXIS VALLEJOS PÉREZ
-
-      # Texto de ENTIDAD que aparece junto al autorizador
       - PDF_AUTH_ENTITY=HOSPITAL DE LA AMISTAD
     volumes:
-      # Monta la carpeta local con los logos dentro del contenedor (solo lectura)
       - ./hospital-inventarios-api/assets:/app/assets:ro
     depends_on:
       db:
         condition: service_healthy
-    ports: [ "8000:8000" ]
+    ports:
+      - "8000:8000"
+    command: [ "npm", "start" ]     # 👈👈👈 CLAVE
   web:
     build:
       context: ./hospital-inventarios-web
       args:
-        - VITE_OWNER_EMAIL=gustavo.herrera   # 👈 pon aquí tu email
+        - VITE_OWNER_EMAIL=gustavo.herrera  # 👈 pon aquí tu email
     container_name: hospital_web
     depends_on: [ api ]
     ports: [ "8081:80" ]
