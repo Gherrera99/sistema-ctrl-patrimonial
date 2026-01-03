@@ -105,14 +105,20 @@
     <div v-if="showDetail" class="modal-backdrop" @click.self="closeDetail">
       <div class="modal">
         <div class="modal-head">
-          <div>
+          <div class="min-w-0">
             <div class="text-sm text-gray-500">Dictamen</div>
-            <div class="text-lg font-semibold">
+            <div class="text-lg font-semibold truncate">
               #{{ dictamen?.id }} — {{ dictamen?.bien?.no_inventario }} · {{ dictamen?.bien?.nombre }}
+            </div>
+
+            <div class="text-xs text-gray-500 mt-1">
+              Creador: <span class="font-medium">{{ dictamen?.creadoPor?.name || '-' }}</span>
+              <span class="text-gray-300">·</span>
+              {{ canEdit ? 'Con permisos de edición' : 'Solo lectura' }}
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 shrink-0">
             <a
                 v-if="dictamen?.id"
                 class="btn-secondary"
@@ -138,7 +144,6 @@
               <div class="text-xs text-gray-500">Estado</div>
               <div class="font-medium flex items-center gap-2">
                 <span class="badge" :class="badgeClass(dictamen?.estado)">{{ dictamen?.estado }}</span>
-                <span v-if="!canEdit" class="text-xs text-gray-500">(Solo lectura)</span>
               </div>
             </div>
 
@@ -148,8 +153,22 @@
             </div>
 
             <div class="card">
-              <div class="text-xs text-gray-500">Escaneado</div>
-              <div class="font-medium">{{ hasScan(dictamen) ? 'Cargado' : 'No cargado' }}</div>
+              <div class="text-xs text-gray-500">Escaneados</div>
+              <div class="font-medium">{{ scanFiles.length ? `${scanFiles.length} archivo(s)` : 'No cargado' }}</div>
+            </div>
+          </div>
+
+          <!-- Bloque de firma -->
+          <div v-if="dictamen?.estado === 'FIRMADO'" class="card mb-4 bg-green-50 border-green-200">
+            <div class="font-semibold text-sm text-green-800">Dictamen firmado</div>
+            <div class="text-sm text-green-900 mt-1">
+              Firmado por: <span class="font-medium">{{ dictamen?.firmadoPor || '-' }}</span>
+            </div>
+            <div class="text-sm text-green-900">
+              Puesto: <span class="font-medium">{{ dictamen?.puestoFirmante || '-' }}</span>
+            </div>
+            <div class="text-sm text-green-900">
+              Fecha firma: <span class="font-medium">{{ dictamen?.firmadoAt ? fmtDateTime(dictamen.firmadoAt) : '-' }}</span>
             </div>
           </div>
 
@@ -173,36 +192,75 @@
             </div>
           </div>
 
-          <!-- Escaneado -->
+          <!-- Escaneados: historial -->
           <div class="card mt-4">
-            <div class="font-semibold text-sm mb-2">Dictamen escaneado</div>
+            <div class="font-semibold text-sm mb-2">Archivos escaneados (historial)</div>
 
-            <div class="flex flex-col md:flex-row md:items-center gap-2">
-              <input
-                  type="file"
-                  @change="onFile"
-                  accept=".pdf,image/*"
-                  class="file-input flex-1"
-              />
+            <div v-if="!scanFiles.length" class="text-sm text-gray-500">
+              No hay escaneados cargados.
+            </div>
 
-              <button
-                  class="btn-secondary shrink-0"
-                  type="button"
-                  @click="subirEscaneado"
-                  :disabled="!file || loadingUpload || (!canUpload && !isAdmin)"
+            <div v-else class="border rounded overflow-hidden">
+              <div
+                  v-for="a in scanFiles"
+                  :key="a.id"
+                  class="p-3 border-b last:border-b-0 flex items-start justify-between gap-3"
               >
-                {{ loadingUpload ? 'Subiendo...' : 'Subir' }}
-              </button>
+                <div class="min-w-0">
+                  <div class="font-medium truncate">
+                    {{ a.nombre }}
+                    <span class="text-xs text-gray-500">({{ String(a.tipo || '').toUpperCase() }})</span>
+                  </div>
+
+                  <div class="text-xs text-gray-500 mt-1">
+                    Subido por: <span class="font-medium">{{ a.uploadedBy?.name || '—' }}</span>
+                    <span class="text-gray-300">·</span>
+                    {{ a.uploadedAt ? fmtDateTime(a.uploadedAt) : '—' }}
+                  </div>
+
+                  <a
+                      class="text-green-700 hover:underline text-sm"
+                      :href="a.filePath"
+                      target="_blank"
+                      rel="noopener"
+                  >
+                    Ver archivo
+                  </a>
+                </div>
+
+                <span class="badge badge-gray shrink-0">
+                  #{{ a.id }}
+                </span>
+              </div>
             </div>
 
-            <div class="mt-2 text-sm">
-              Estado: <span class="font-medium">{{ hasScan(dictamen) ? 'Cargado' : 'No cargado' }}</span>
-            </div>
+            <!-- Upload -->
+            <div class="mt-4 pt-3 border-t">
+              <div class="font-semibold text-sm mb-2">
+                {{ dictamen?.estado === 'FIRMADO' ? 'Reemplazar escaneado (solo ADMIN)' : 'Subir escaneado' }}
+              </div>
 
-            <div v-if="scanFile(dictamen)" class="mt-2">
-              <a class="text-green-700 hover:underline" :href="scanFile(dictamen).filePath" target="_blank" rel="noopener">
-                Ver escaneado: {{ scanFile(dictamen).nombre }}
-              </a>
+              <div v-if="!canUpload" class="text-sm text-gray-500">
+                No tienes permisos para subir archivos en este estado.
+              </div>
+
+              <div v-else class="flex flex-col md:flex-row md:items-center gap-2">
+                <input
+                    type="file"
+                    @change="onFile"
+                    accept=".pdf,image/*"
+                    class="file-input flex-1"
+                />
+
+                <button
+                    class="btn-secondary shrink-0"
+                    type="button"
+                    @click="subirEscaneado"
+                    :disabled="!file || loadingUpload"
+                >
+                  {{ loadingUpload ? 'Subiendo...' : 'Subir' }}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -213,7 +271,7 @@
               Editar
             </button>
 
-            <button v-if="editMode" class="btn" @click="guardar" :disabled="loadingSave" type="button">
+            <button v-if="editMode" class="btn" @click="guardarCambios" :disabled="loadingSave" type="button">
               {{ loadingSave ? 'Guardando...' : 'Guardar cambios' }}
             </button>
 
@@ -223,7 +281,7 @@
 
             <!-- Firmar -->
             <button
-                v-if="dictamen?.id && dictamen.estado === 'BORRADOR'"
+                v-if="canSign && dictamen?.estado === 'BORRADOR'"
                 class="btn-secondary"
                 type="button"
                 :disabled="loadingSign || !hasScan(dictamen)"
@@ -278,8 +336,8 @@
               </button>
             </div>
 
-            <!-- ✅ FIX: lista con altura máxima + scroll interno -->
-            <div v-if="hits.length" class="mt-3 border rounded overflow-y-auto max-h-64">
+            <!-- IMPORTANTE: scroll interno para que NO crezca el modal -->
+            <div v-if="hits.length" class="mt-3 border rounded overflow-auto max-h-64">
               <button
                   v-for="b in hits"
                   :key="b.id"
@@ -339,7 +397,7 @@
               </div>
 
               <div class="flex gap-2">
-                <button class="btn" @click="guardar" :disabled="loadingSave">
+                <button class="btn" @click="crearDictamen" :disabled="loadingSave">
                   {{ loadingSave ? 'Creando...' : 'Crear dictamen' }}
                 </button>
                 <button class="btn-secondary" @click="closeCreate" type="button">Cancelar</button>
@@ -367,7 +425,6 @@ const router = useRouter();
 
 const error = ref('');
 const success = ref('');
-
 function clearMessages() { error.value = ''; success.value = ''; }
 
 // listado
@@ -377,6 +434,7 @@ const listQ = ref('');
 const loadingList = ref(false);
 
 // user
+const myId = ref<number | null>(null);
 const myRole = ref<string>('');
 const isAdmin = computed(() => myRole.value === 'ADMIN');
 
@@ -395,7 +453,7 @@ const hits = ref<any[]>([]);
 const selectedBien = ref<any | null>(null);
 const loadingSearch = ref(false);
 
-// form
+// form (se reutiliza para create y edit)
 const f = reactive({
   fecha: new Date().toISOString().slice(0, 10),
   unidadAdscripcion: 'Hospital de la Amistad',
@@ -420,26 +478,56 @@ function badgeClass(estado?: string) {
   return 'badge-gray';
 }
 
+function fmtDateTime(v: any) {
+  try {
+    const d = new Date(v);
+    if (Number.isNaN(d.getTime())) return String(v);
+    return d.toLocaleString();
+  } catch {
+    return String(v);
+  }
+}
+
 function hasScan(d: any) {
   const arr = d?.DictamenArchivo || [];
   return arr.some((a: any) => ['PDF','FOTO'].includes(String(a.tipo).toUpperCase()));
 }
 
-function scanFile(d: any) {
-  const arr = d?.DictamenArchivo || [];
-  return arr.find((a: any) => ['PDF','FOTO'].includes(String(a.tipo).toUpperCase())) || null;
-}
+const scanFiles = computed(() => {
+  const arr = dictamen.value?.DictamenArchivo || [];
+  // vienen ordenados desc desde API, pero por si acaso:
+  return [...arr].sort((a: any, b: any) => {
+    const da = a?.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
+    const db = b?.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+    return db - da;
+  });
+});
 
+const isOwner = computed(() => {
+  const createdById = Number(dictamen.value?.creadoPorId);
+  return !!myId.value && createdById === myId.value;
+});
+
+// ✅ Permisos UI según reglas
 const canEdit = computed(() => {
-  if (!dictamen.value?.id) return true;
-  if (dictamen.value?.estado === 'BORRADOR') return true;
-  return isAdmin.value;
+  if (!dictamen.value?.id) return false;
+  if (dictamen.value?.estado !== 'BORRADOR') return false;
+  return isAdmin.value || isOwner.value;
 });
 
 const canUpload = computed(() => {
   if (!dictamen.value?.id) return false;
-  if (dictamen.value?.estado === 'BORRADOR') return true;
-  return isAdmin.value;
+  const estado = String(dictamen.value?.estado || '');
+  if (estado === 'CANCELADO') return false;
+  if (estado === 'BORRADOR') return isAdmin.value || isOwner.value;
+  if (estado === 'FIRMADO') return isAdmin.value; // reemplazo permitido
+  return false;
+});
+
+const canSign = computed(() => {
+  if (!dictamen.value?.id) return false;
+  if (dictamen.value?.estado !== 'BORRADOR') return false;
+  return isAdmin.value || isOwner.value;
 });
 
 function fillFormFromDictamen(d: any) {
@@ -454,9 +542,12 @@ async function loadMe() {
   for (const url of candidates) {
     try {
       const { data } = await axios.get(url);
-      if (data?.role) { myRole.value = String(data.role); return; }
+      if (data?.id) myId.value = Number(data.id);
+      if (data?.role) myRole.value = String(data.role);
+      if (data?.id || data?.role) return;
     } catch {}
   }
+  myId.value = null;
   myRole.value = '';
 }
 
@@ -486,6 +577,8 @@ async function cargarDictamen(id: number) {
     const { data } = await axios.get(`${API}/dictamen/${id}`);
     dictamen.value = data;
     fillFormFromDictamen(data);
+  } catch (e: any) {
+    error.value = e?.response?.data?.error || 'No se pudo cargar el dictamen.';
   } finally {
     loadingDetail.value = false;
   }
@@ -496,6 +589,7 @@ async function openDetail(id: number) {
   showDetail.value = true;
   editMode.value = false;
   file.value = null;
+
   await cargarDictamen(id);
   router.replace(`/dictamenes/${id}`);
 }
@@ -555,38 +649,9 @@ function selectBien(b: any) {
   f.ubicacionFisica = b?.ubicacion?.nombre || '';
 }
 
-async function guardar() {
+async function crearDictamen() {
   clearMessages();
 
-  // si hay dictamen abierto y estamos editando -> update
-  if (dictamen.value?.id) {
-    if (!editMode.value) return;
-
-    if (!f.dictamenTexto.trim()) { error.value = 'El dictamen (texto) es requerido.'; return; }
-
-    loadingSave.value = true;
-    try {
-      const payload = {
-        dictamenTexto: f.dictamenTexto.trim(),
-        unidadAdscripcion: 'Hospital de la Amistad',
-        ubicacionFisica: f.ubicacionFisica.trim() || null,
-        fecha: f.fecha || null,
-      };
-
-      await axios.put(`${API}/dictamen/${dictamen.value.id}`, payload);
-      await cargarDictamen(dictamen.value.id);
-      await cargarListado();
-      success.value = '✅ Cambios guardados.';
-      editMode.value = false;
-    } catch (e: any) {
-      error.value = e?.response?.data?.error || 'No se pudo guardar.';
-    } finally {
-      loadingSave.value = false;
-    }
-    return;
-  }
-
-  // crear nuevo (desde modal crear)
   const bienId = selectedBien.value?.id;
   if (!bienId) { error.value = 'Selecciona un bien.'; return; }
   if (!f.dictamenTexto.trim()) { error.value = 'El dictamen (texto) es requerido.'; return; }
@@ -604,10 +669,40 @@ async function guardar() {
     const { data } = await axios.post(`${API}/dictamen`, payload);
     success.value = '✅ Dictamen creado.';
     showCreate.value = false;
+
     await cargarListado();
     await openDetail(data.id);
   } catch (e: any) {
     error.value = e?.response?.data?.error || 'No se pudo crear.';
+  } finally {
+    loadingSave.value = false;
+  }
+}
+
+async function guardarCambios() {
+  clearMessages();
+  if (!dictamen.value?.id) return;
+  if (!editMode.value) return;
+  if (!canEdit.value) { error.value = 'No tienes permisos para editar.'; return; }
+  if (!f.dictamenTexto.trim()) { error.value = 'El dictamen (texto) es requerido.'; return; }
+
+  loadingSave.value = true;
+  try {
+    const payload = {
+      dictamenTexto: f.dictamenTexto.trim(),
+      unidadAdscripcion: 'Hospital de la Amistad',
+      ubicacionFisica: f.ubicacionFisica.trim() || null,
+      fecha: f.fecha || null,
+    };
+
+    await axios.put(`${API}/dictamen/${dictamen.value.id}`, payload);
+    await cargarDictamen(dictamen.value.id);
+    await cargarListado();
+
+    success.value = '✅ Cambios guardados.';
+    editMode.value = false;
+  } catch (e: any) {
+    error.value = e?.response?.data?.error || 'No se pudo guardar.';
   } finally {
     loadingSave.value = false;
   }
@@ -620,6 +715,7 @@ function onFile(ev: any) {
 async function subirEscaneado() {
   clearMessages();
   if (!dictamen.value?.id) return;
+  if (!canUpload.value) { error.value = 'No tienes permisos para subir archivos.'; return; }
   if (!file.value) { error.value = 'Selecciona un archivo (PDF/imagen).'; return; }
 
   loadingUpload.value = true;
@@ -634,6 +730,7 @@ async function subirEscaneado() {
     file.value = null;
     await cargarDictamen(dictamen.value.id);
     await cargarListado();
+
     success.value = '✅ Escaneado subido.';
   } catch (e: any) {
     error.value = e?.response?.data?.error || 'No se pudo subir el escaneado.';
@@ -645,6 +742,7 @@ async function subirEscaneado() {
 async function firmar() {
   clearMessages();
   if (!dictamen.value?.id) return;
+  if (!canSign.value) { error.value = 'No tienes permisos para firmar.'; return; }
   if (!hasScan(dictamen.value)) { error.value = 'Primero sube el escaneado para poder firmar.'; return; }
   if (!confirm('¿Firmar el dictamen?')) return;
 
@@ -712,15 +810,14 @@ watch(
 
 .card { @apply p-3 rounded border bg-white; }
 
-/* ✅ FIX: modal con altura máxima + scroll interno en el body */
-.modal-backdrop { @apply fixed inset-0 bg-black/40 flex items-start justify-center p-4 z-50; }
-.modal { @apply w-full max-w-3xl bg-white rounded-2xl shadow-lg overflow-hidden max-h-[90vh] flex flex-col; }
-.modal-head { @apply px-4 py-3 border-b flex items-start justify-between gap-3; }
-.modal-body { @apply p-4 overflow-y-auto flex-1; }
+.modal-backdrop { @apply fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50; }
 
-.file-input {
-  @apply block w-full text-sm text-gray-700;
-}
+/* ✅ CLAVE: modal con altura máxima y scroll interno */
+.modal { @apply w-full max-w-3xl bg-white rounded-2xl shadow-lg overflow-hidden flex flex-col max-h-[90vh]; }
+.modal-head { @apply px-4 py-3 border-b flex items-start justify-between gap-3; }
+.modal-body { @apply p-4 overflow-auto flex-1; }
+
+.file-input { @apply block w-full text-sm text-gray-700; }
 .file-input::file-selector-button {
   @apply mr-3 py-2 px-3 rounded border-0 bg-gray-200 text-gray-800 hover:bg-gray-300;
 }

@@ -16,6 +16,50 @@ function tipoDictamenFromCategoria(item: any) {
     return cat === 'INFORMATICA' ? 'INFORMATICA' : 'ADMINISTRATIVO';
 }
 
+function getUser(req: Request) {
+    const u = (req as any).user || {};
+    return {
+        id: Number(u.id),
+        role: String(u.role || ''),
+        name: String(u.name || ''),
+    };
+}
+
+function isAdmin(req: Request) {
+    return String((req as any).user?.role || '') === 'ADMIN';
+}
+
+function isOwner(req: Request, dictamen: any) {
+    const uid = Number((req as any).user?.id);
+    return !!uid && Number(dictamen?.creadoPorId) === uid;
+}
+
+function canEditDictamen(req: Request, dictamen: any) {
+    // BORRADOR: creador o ADMIN
+    if (String(dictamen?.estado) !== 'BORRADOR') return false;
+    return isAdmin(req) || isOwner(req, dictamen);
+}
+
+function canUploadScan(req: Request, dictamen: any) {
+    const estado = String(dictamen?.estado || '');
+    // CANCELADO: nadie
+    if (estado === 'CANCELADO') return false;
+
+    // BORRADOR: creador o ADMIN
+    if (estado === 'BORRADOR') return isAdmin(req) || isOwner(req, dictamen);
+
+    // FIRMADO: SOLO ADMIN (reemplazo permitido)
+    if (estado === 'FIRMADO') return isAdmin(req);
+
+    return false;
+}
+
+function canSign(req: Request, dictamen: any) {
+    // Solo BORRADOR y solo creador/admin
+    if (String(dictamen?.estado) !== 'BORRADOR') return false;
+    return isAdmin(req) || isOwner(req, dictamen);
+}
+
 export async function searchBienes(req: Request, res: Response) {
     const q = String(req.query.q ?? '').trim();
     if (!q) return res.json([]);
@@ -104,8 +148,12 @@ export async function getDictamen(req: Request, res: Response) {
         include: {
             bien: { include: { ubicacion: true, estado: true, proveedor: true } },
             creadoPor: { select: { id: true, name: true, email: true, role: true } },
-            DictamenArchivo: { orderBy: { uploadedAt: 'desc' } },
-
+            DictamenArchivo: {
+                orderBy: { uploadedAt: 'desc' },
+                include: {
+                    uploadedBy: { select: { id: true, name: true } }, // ✅ para mostrar en UI
+                },
+            },
         },
     });
     if (!d) return res.status(404).json({ error: 'No encontrado' });
@@ -114,13 +162,12 @@ export async function getDictamen(req: Request, res: Response) {
 
 export async function updateDictamen(req: Request, res: Response) {
     const id = Number(req.params.id);
-    const role = String((req as any).user?.role ?? '');
-    const isAdmin = role === 'ADMIN';
-
     const before = await prisma.dictamenBien.findUnique({ where: { id } });
     if (!before) return res.status(404).json({ error: 'No encontrado' });
-    if (String(before.estado) !== 'BORRADOR' && !isAdmin) {
-        return res.status(400).json({ error: 'Solo ADMIN puede editar dictámenes firmados/cancelados' });
+
+    // ✅ PERMISOS NUEVOS
+    if (!canEditDictamen(req, before)) {
+        return res.status(403).json({ error: 'No autorizado para editar este dictamen.' });
     }
 
     const { dictamenTexto, unidadAdscripcion, ubicacionFisica, fecha } = req.body || {};
@@ -163,7 +210,16 @@ export async function listDictamenes(req: Request, res: Response) {
         include: {
             bien: { select: { id: true, no_inventario: true, nombre: true, categoria: true } },
             creadoPor: { select: { id: true, name: true } },
-            DictamenArchivo: { orderBy: { uploadedAt: 'desc' } },
+            DictamenArchivo: {
+                orderBy: { uploadedAt: 'desc' },
+                select: {
+                    id: true,
+                    tipo: true,
+                    nombre: true,
+                    filePath: true,
+                    uploadedAt: true,
+                },
+            },
         },
     });
 
@@ -173,28 +229,27 @@ export async function listDictamenes(req: Request, res: Response) {
 export async function firmarDictamen(req: Request, res: Response) {
     const id = Number(req.params.id);
 
-    const dictamen = await prisma.dictamenBien.findUnique({
+    const d0 = await prisma.dictamenBien.findUnique({
         where: { id },
-        include: { bien: true, DictamenArchivo: true },
+        include: { DictamenArchivo: true },
     });
+    if (!d0) return res.status(404).json({ error: 'No encontrado' });
 
-    if (!dictamen) return res.status(404).json({ error: 'No encontrado' });
-    if (String(dictamen.estado) !== 'BORRADOR') {
-        return res.status(400).json({ error: 'Ya está firmado o cancelado' });
+    // ✅ PERMISOS NUEVOS
+    if (!canSign(req, d0)) {
+        return res.status(403).json({ error: 'No autorizado para firmar este dictamen.' });
     }
 
-    const tieneEscaneado = (dictamen.DictamenArchivo || []).some(a =>
+    const tieneEscaneado = (d0?.DictamenArchivo || []).some(a =>
         ['PDF', 'FOTO'].includes(String(a.tipo).toUpperCase())
     );
-
     if (!tieneEscaneado) {
         return res.status(400).json({ error: 'Primero sube el dictamen escaneado para poder firmar.' });
     }
 
-    const coordTipo = String((dictamen as any).coordinacionTipo ?? '').toUpperCase();
-
-    const cfg = dictamen.configId
-        ? await prisma.dictamenConfig.findUnique({ where: { id: dictamen.configId } })
+    const coordTipo = String((d0 as any).coordinacionTipo ?? '').toUpperCase();
+    const cfg = d0.configId
+        ? await prisma.dictamenConfig.findUnique({ where: { id: d0.configId } })
         : await prisma.dictamenConfig.findUnique({ where: { coordinacion: coordTipo as any } });
 
     if (!cfg) return res.status(400).json({ error: `No existe configuración para ${coordTipo}` });
@@ -259,17 +314,15 @@ export async function dictamenPdf(req: Request, res: Response) {
 }
 
 export async function subirEscaneado(req: Request, res: Response) {
-    const userId = Number((req as any).user?.id);
-
     const id = Number(req.params.id);
-    const role = String((req as any).user?.role ?? '');
-    const isAdmin = role === 'ADMIN';
+    const u = getUser(req);
 
     const d = await prisma.dictamenBien.findUnique({ where: { id } });
     if (!d) return res.status(404).json({ error: 'No encontrado' });
 
-    if (String(d.estado) !== 'BORRADOR' && !isAdmin) {
-        return res.status(400).json({ error: 'Solo ADMIN puede subir escaneado si no está en BORRADOR' });
+    // ✅ PERMISOS NUEVOS
+    if (!canUploadScan(req, d)) {
+        return res.status(403).json({ error: 'No autorizado para subir escaneado en este dictamen.' });
     }
 
     const file = (req as any).file as Express.Multer.File | undefined;
@@ -280,18 +333,18 @@ export async function subirEscaneado(req: Request, res: Response) {
             ? TipoArchivoDictamen.PDF
             : TipoArchivoDictamen.FOTO;
 
-    const publicPath = `/api/uploads/dictamen/${file.filename}`;
+    const filePath = `/api/uploads/dictamen/${file.filename}`;
 
     await prisma.dictamenArchivo.create({
         data: {
             dictamenId: id,
             tipo: tipoArchivo,
             nombre: file.originalname,
-            filePath: publicPath,
-            uploadedById: userId,
+            filePath,
+            uploadedById: u.id,
         },
     });
 
-    res.json({ ok: true, filePath: publicPath });
+    res.json({ ok: true, filePath });
 }
 
