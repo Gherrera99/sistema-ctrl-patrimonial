@@ -1,6 +1,8 @@
+//api/src/app.ts
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import path from 'node:path';
 
 import authRoutes from './auth/auth.routes.js';
 import invRoutes from './inventory/inventory.routes.js';
@@ -11,6 +13,7 @@ import pdfRoutes from './pdf/pdf.routes.js';
 import usersRoutes from './users/users.routes.js';
 import movimientosRoutes from "./movimientos/movimientos.routes.js";
 import proveedoresRoutes from "./proveedores/proveedores.routes.js";
+import dictamenRoutes from './dictamen/dictamen.routes.js';
 
 
 
@@ -18,9 +21,11 @@ const app = express();
 app.set('trust proxy', 1);
 
 const origin = process.env.ALLOW_ORIGIN || 'http://localhost:8081';
-app.use(cors({ origin: 'http://localhost:8081', credentials: true }));
+app.use(cors({ origin, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+
+
 
 app.use('/api/auth', authRoutes);
 app.use('/api/inventario', invRoutes);
@@ -31,6 +36,8 @@ app.use('/api/resguardo', pdfRoutes);
 app.use('/api/users', usersRoutes);
 app.use("/api/movimientos", movimientosRoutes);
 app.use("/api/proveedores", proveedoresRoutes); // 👈 NUEVO
+app.use('/api/dictamen', dictamenRoutes);
+app.use('/api/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // al final de app.ts, antes de export default app;
 app.use((err: any, _req, res, _next) => {

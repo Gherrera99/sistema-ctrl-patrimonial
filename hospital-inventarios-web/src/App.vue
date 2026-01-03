@@ -7,9 +7,12 @@
         <router-link class="link" to="/">Inventario</router-link>
         <router-link class="link" to="/ubicaciones">Ubicaciones</router-link>
         <router-link class="link" to="/autoridades">Autorizadores</router-link>
+<!--        <router-link v-if="isOwner" class="link" to="/proveedores">Proveedores</router-link>-->
+<!--        <router-link v-if="isOwner" class="link" to="/admin/usuarios">Usuarios</router-link>-->
+        <router-link v-if="auth.can('proveedores:read')" class="link" to="/proveedores">Proveedores</router-link>
+        <router-link v-if="auth.isAdmin" class="link" to="/admin/usuarios">Usuarios</router-link>
+        <router-link v-if="auth.can('dictamen:read')" class="link" to="/dictamenes">Dictámenes</router-link>
 
-        <!-- 👇 Sólo tú ves este link (dueño/owner) -->
-        <router-link v-if="isOwner" class="link" to="/admin/usuarios">Usuarios</router-link>
 
         <button class="btn" @click="logout">Salir</button>
       </div>
@@ -19,17 +22,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
 import { useAuth } from './stores/auth';
 
 const auth = useAuth();
 const logout = async () => { try { await auth.logout(); location.href = '/login'; } catch {} };
-
-// visible sólo si el email del usuario coincide con el configurado en el build
-const isOwner = computed(() =>
-    auth.user?.email === (import.meta.env.VITE_OWNER_EMAIL as string | undefined)
-);
 </script>
+
 
 <style scoped>
 .btn { @apply bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700; }

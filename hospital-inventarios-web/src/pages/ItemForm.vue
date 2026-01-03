@@ -133,6 +133,16 @@
         </select>
       </div>
 
+      <!-- Categoría del bien -->
+      <div>
+        <label class="label">Categoría del bien</label>
+        <select class="input" v-model="f.categoriaBien">
+          <option value="GENERAL">General (Mantenimiento)</option>
+          <option value="INFORMATICA">Informática (TI)</option>
+        </select>
+      </div>
+
+
       <div class="md:col-span-2 flex gap-2 pt-2">
         <button class="btn" type="submit">{{ isEdit ? 'Guardar' : 'Guardar' }}</button>
         <router-link to="/" class="btn-secondary">Cancelar</router-link>
@@ -169,6 +179,7 @@ const f = reactive({
   observaciones: '',
   fechaEntrega: '',
   tipoBien: 'ADMINISTRATIVO',
+  categoriaBien: 'GENERAL',
   estadoId: null,
   ubicacionId: null,
 
@@ -218,11 +229,12 @@ async function loadIfEdit(){
   f.observaciones      = data.observaciones ?? '';
   f.fechaEntrega       = data.fecha_entrega?.substring(0,10) ?? '';
   f.tipoBien           = data.tipo ?? 'ADMINISTRATIVO';
+  f.categoriaBien      = data.categoria ?? 'GENERAL';
   f.estadoId           = data.estadoId ?? null;
   f.ubicacionId        = data.ubicacionId ?? null;
-  f.costoAdquisicion = data.costo_adquisicion ?? '';
-  f.tipoPropiedad    = data.tipoPropiedad ?? '';
-  f.proveedorId      = data.proveedorId ?? null;
+  f.costoAdquisicion   = data.costo_adquisicion ?? '';
+  f.tipoPropiedad      = data.tipoPropiedad ?? '';
+  f.proveedorId        = data.proveedorId ?? null;
 }
 
 async function onSubmit(){
@@ -246,6 +258,7 @@ async function onSubmit(){
     fecha_entrega:      toISODate(f.fechaEntrega),
 
     tipo:               f.tipoBien,
+    categoria:          f.categoriaBien,
     estadoId:           f.estadoId ?? null,
     ubicacionId:        f.ubicacionId ?? null,
 

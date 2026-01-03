@@ -102,6 +102,42 @@ async function main() {
   });
 }
 
+// ✅ Configuración de Dictamen (Mantenimiento / TI)
+await prisma.dictamenConfig.upsert({
+    where: { coordinacion: 'MANTENIMIENTO' },
+    update: {
+        tituloCoordinacion: 'COORDINACIÓN DE MANTENIMIENTO',
+        firmanteNombre: 'NOMBRE COORDINADOR MANTENIMIENTO',
+        firmantePuesto: 'COORDINADOR DE MANTENIMIENTO',
+        active: true,
+    },
+    create: {
+        coordinacion: 'MANTENIMIENTO',
+        tituloCoordinacion: 'COORDINACIÓN DE MANTENIMIENTO',
+        firmanteNombre: 'NOMBRE COORDINADOR MANTENIMIENTO',
+        firmantePuesto: 'COORDINADOR DE MANTENIMIENTO',
+        active: true,
+    },
+});
+
+await prisma.dictamenConfig.upsert({
+    where: { coordinacion: 'TECNOLOGIAS' },
+    update: {
+        tituloCoordinacion: 'COORDINACIÓN DE TECNOLOGÍAS DE LA INFORMACIÓN',
+        firmanteNombre: 'NOMBRE COORDINADOR TI',
+        firmantePuesto: 'COORDINADOR DE TECNOLOGÍAS DE LA INFORMACIÓN',
+        active: true,
+    },
+    create: {
+        coordinacion: 'TECNOLOGIAS',
+        tituloCoordinacion: 'COORDINACIÓN DE TECNOLOGÍAS DE LA INFORMACIÓN',
+        firmanteNombre: 'NOMBRE COORDINADOR TI',
+        firmantePuesto: 'COORDINADOR DE TECNOLOGÍAS DE LA INFORMACIÓN',
+        active: true,
+    },
+});
+
+
 main()
     .then(async () => {
       console.log('✅ Seed completado');

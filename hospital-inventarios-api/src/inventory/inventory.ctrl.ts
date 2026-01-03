@@ -72,6 +72,7 @@ export async function create(req: Request, res: Response) {
         no_factura,
         fecha_adjudicacion,
         modelo,
+        categoria,
         marca,
         no_serie,
         observaciones,
@@ -103,19 +104,29 @@ export async function create(req: Request, res: Response) {
         observaciones: observaciones || null,
         fecha_entrega: asDate(fecha_entrega),
 
-        // enum
+        categoria: categoria
+           ? (String(categoria).toUpperCase() as any) // GENERAL | INFORMATICA
+           : undefined,
+
+
+          // enum
         tipo: (String(tipo || 'ADMINISTRATIVO').toUpperCase() as TipoBien),
 
         // relaciones (usar nested connect para evitar error de Prisma)
         ...(estadoId ? { estado: { connect: { id: Number(estadoId) } } } : {}),
         ...(ubicacionId ? { ubicacion: { connect: { id: Number(ubicacionId) } } } : {}),
 
-        // quién creó (si manejas usuarios)
-        ...(req as any).user?.id ? { createdById: Number((req as any).user.id) } : {},
+        // quién creó (relación correcta)
+        ...(req as any).user?.id
+          ? { createdBy: { connect: { id: Number((req as any).user.id) } } }
+          : {},
 
-        costo_adquisicion: costo_adquisicion ? Number(costo_adquisicion) : null,
+        costo_adquisicion:
+            costo_adquisicion !== undefined && costo_adquisicion !== null && String(costo_adquisicion).trim() !== ''
+               ? Number(costo_adquisicion)
+               : null,
 
-        tipoPropiedad: tipoPropiedad
+          tipoPropiedad: tipoPropiedad
           ? (String(tipoPropiedad).toUpperCase() as any)
           : undefined,
 
@@ -149,6 +160,7 @@ export async function update(req: Request, res: Response) {
         no_factura,
         fecha_adjudicacion,
         modelo,
+        categoria,
         marca,
         no_serie,
         observaciones,
@@ -195,6 +207,10 @@ export async function update(req: Request, res: Response) {
                 ...(observaciones !== undefined ? { observaciones: observaciones || null } : {}),
                 ...(fecha_entrega !== undefined ? { fecha_entrega: asDate(fecha_entrega) } : {}),
                 ...(tipo !== undefined ? { tipo: (String(tipo).toUpperCase() as TipoBien) } : {}),
+
+                ...(categoria !== undefined
+                    ? { categoria: String(categoria).toUpperCase() as any }
+                    : {}),
 
                 ...(estadoId !== undefined
                     ? estadoId

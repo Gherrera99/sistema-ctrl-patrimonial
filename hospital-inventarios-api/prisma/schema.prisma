@@ -1,4 +1,4 @@
-// hospital-inventarios-api/prisma/schema.prisma
+//api/prisma/schema.prisma
 datasource db {
   provider = "mysql"
   url      = env("DATABASE_URL")
@@ -62,6 +62,22 @@ enum TipoPropiedadBien {
   COMODATO
 }
 
+enum CategoriaBien {
+  GENERAL
+  INFORMATICA
+}
+
+enum CoordinacionDictamen {
+  MANTENIMIENTO
+  TECNOLOGIAS
+}
+
+enum TipoArchivoDictamen {
+  FOTO
+  PDF
+  OTRO
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   name      String
@@ -72,12 +88,14 @@ model User {
   updatedAt DateTime @updatedAt
 
   MovimientoBien MovimientoBien[]
-
-  DictamenBien DictamenBien[]
-
-  ArchivoBien ArchivoBien[]
+  DictamenBien   DictamenBien[]
+  ArchivoBien    ArchivoBien[]
 
   InventoryItem InventoryItem[]
+
+  itemsCreados InventoryItem[] @relation("ItemsCreados")
+
+  DictamenArchivo DictamenArchivo[]
 }
 
 model EstadoFisico {
@@ -126,6 +144,8 @@ model InventoryItem {
   clasificacionId Int?
   clasificacion   ClasificacionBien? @relation(fields: [clasificacionId], references: [id])
 
+  categoria CategoriaBien @default(GENERAL)
+
   responsable        String    @db.VarChar(255)
   rfc                String    @db.VarChar(25)
   no_factura         String?   @db.VarChar(30)
@@ -159,7 +179,9 @@ model InventoryItem {
   createdById Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  User        User[]
+  createdBy   User?    @relation("ItemsCreados", fields: [createdById], references: [id])
+  User        User?    @relation(fields: [userId], references: [id])
+  userId      Int?
 
   @@index([no_inventario])
   @@index([responsable])
@@ -214,8 +236,14 @@ model DictamenBien {
   bienId Int
   bien   InventoryItem @relation(fields: [bienId], references: [id])
 
+  folio String? @unique @db.VarChar(50)
+
+  // Para seleccionar plantilla (TI/Mantenimiento)
+  coordinacionTipo CoordinacionDictamen
+  configId         Int?
+  config           DictamenConfig?      @relation(fields: [configId], references: [id])
+
   tipo              TipoDictamen
-  coordinacion      String?      @db.VarChar(255)
   unidadAdscripcion String?      @db.VarChar(255)
   ubicacionFisica   String?      @db.VarChar(255)
   fecha             DateTime     @default(now())
@@ -228,11 +256,61 @@ model DictamenBien {
   creadoPorId Int
   creadoPor   User @relation(fields: [creadoPorId], references: [id])
 
-  firmadoPor     String? @db.VarChar(255)
-  puestoFirmante String? @db.VarChar(255)
+  firmadoPor     String?   @db.VarChar(255)
+  puestoFirmante String?   @db.VarChar(255)
+  firmadoAt      DateTime?
+  pdfPath        String?   @db.VarChar(500)
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  DictamenArchivo DictamenArchivo[]
+
+  @@index([bienId])
+  @@index([estado])
+}
+
+model DictamenConfig {
+  id Int @id @default(autoincrement())
+
+  coordinacion CoordinacionDictamen @unique
+
+  // Texto que aparece arriba (ej. "COORDINACION DE TECNOLOGIAS DE LA INFORMACION")
+  tituloCoordinacion String @db.VarChar(255)
+
+  // Campos del firmante (bloque inferior)
+  firmanteNombre String @db.VarChar(255)
+  firmantePuesto String @db.VarChar(255)
+
+  // Opcional: si después quieres firma/imagen
+  firmaPath String? @db.VarChar(500)
+  selloPath String? @db.VarChar(500)
+
+  active    Boolean   @default(true)
+  validFrom DateTime  @default(now())
+  validTo   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  DictamenBien DictamenBien[]
+}
+
+model DictamenArchivo {
+  id Int @id @default(autoincrement())
+
+  dictamenId Int
+  dictamen   DictamenBien @relation(fields: [dictamenId], references: [id])
+
+  tipo     TipoArchivoDictamen
+  nombre   String              @db.VarChar(255)
+  filePath String              @db.VarChar(500)
+
+  uploadedAt DateTime @default(now())
+
+  uploadedById Int
+  uploadedBy   User @relation(fields: [uploadedById], references: [id])
+
+  @@index([dictamenId])
 }
 
 model ArchivoBien {
