@@ -8,8 +8,9 @@
       <input v-model.trim="f.name" placeholder="Nombre" class="input md:col-span-2" />
       <input v-model.trim="f.email" placeholder="Email" class="input md:col-span-2" />
       <select v-model="f.role" class="input">
-        <option value="COLABORADOR">Colaborador</option>
-        <option value="ADMIN">Admin</option>
+        <option v-for="r in ROLE_OPTIONS" :key="r.value" :value="r.value">
+          {{ r.label }}
+        </option>
       </select>
       <input v-model.trim="f.password" placeholder="Contraseña" type="password" class="input md:col-span-2" />
       <button class="btn md:col-span-1">Crear</button>
@@ -31,8 +32,9 @@
         <td class="td">{{ u.email }}</td>
         <td class="td">
           <select class="input" v-model="u.role" @change="save(u)">
-            <option value="COLABORADOR">Colaborador</option>
-            <option value="ADMIN">Admin</option>
+            <option v-for="r in ROLE_OPTIONS" :key="r.value" :value="r.value">
+              {{ r.label }}
+            </option>
           </select>
         </td>
         <td class="td space-x-2">
@@ -53,10 +55,28 @@ import axios from 'axios';
 axios.defaults.withCredentials = true;
 const API = '/api/users';
 
-type User = { id:number; name:string; email:string; role:'ADMIN'|'COLABORADOR' };
+type Role =
+    | 'ADMIN'
+    | 'COLABORADOR'
+    | 'CONTROL_PATRIMONIAL'
+    | 'AUXILIAR_PATRIMONIAL'
+    | 'MANTENIMIENTO'
+    | 'TECNOLOGIAS';
+
+type User = { id:number; name:string; email:string; role: Role };
+
+const ROLE_OPTIONS: { value: Role; label: string }[] = [
+  { value: 'COLABORADOR', label: 'Colaborador' },
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'CONTROL_PATRIMONIAL', label: 'Control patrimonial' },
+  { value: 'AUXILIAR_PATRIMONIAL', label: 'Auxiliar patrimonial' },
+  { value: 'MANTENIMIENTO', label: 'Mantenimiento' },
+  { value: 'TECNOLOGIAS', label: 'Tecnologías' },
+];
+
 
 const users = ref<User[]>([]);
-const f = reactive({ name:'', email:'', password:'', role:'COLABORADOR' as 'ADMIN'|'COLABORADOR' });
+const f = reactive({ name:'', email:'', password:'', role:'COLABORADOR' as Role });
 
 async function load() {
   const { data } = await axios.get<User[]>(API);

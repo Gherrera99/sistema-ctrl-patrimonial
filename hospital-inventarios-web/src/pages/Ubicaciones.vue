@@ -70,7 +70,7 @@ async function agregar() {
   await axios.post(`${API}/ubicaciones`, payload);
   form.code = '';
   form.nombre = '';
-  form.orden = 99;
+  form.orden = '';
   await cargar();
 }
 

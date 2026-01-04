@@ -4,6 +4,10 @@ import { Request, Response } from 'express';
 import { prisma } from '../prisma.js';
 import { buildDictamenPdf } from './dictamen.pdf.js';
 import { TipoArchivoDictamen } from '@prisma/client';
+import { EstadoBienLogico, EstadoResguardo, TipoMovimiento } from '@prisma/client';
+import { MovimientosService } from '../movimientos/movimientos.service.js';
+
+
 
 function coordFromCategoria(item: any) {
     // GENERAL -> MANTENIMIENTO, INFORMATICA -> TECNOLOGIAS
@@ -96,10 +100,8 @@ export async function createDictamen(req: Request, res: Response) {
     const { bienId, dictamenTexto, coordinacion, unidadAdscripcion, ubicacionFisica, fecha } = req.body || {};
 
     if (!bienId) return res.status(400).json({ error: 'bienId requerido' });
-    if (!dictamenTexto || !String(dictamenTexto).trim()) {
+    if (!dictamenTexto || !String(dictamenTexto).trim())
         return res.status(400).json({ error: 'dictamenTexto requerido' });
-    }
-    if (!userId) return res.status(401).json({ error: 'No autenticado' });
 
     const bien = await prisma.inventoryItem.findUnique({
         where: { id: Number(bienId) },
@@ -107,48 +109,19 @@ export async function createDictamen(req: Request, res: Response) {
     });
     if (!bien) return res.status(404).json({ error: 'Bien no encontrado' });
 
-    // ✅ Regla nueva: no dictámenes para bienes BAJA
-    if (String(bien.estadoLogico).toUpperCase() === 'BAJA') {
-        return res.status(400).json({ error: 'No se puede crear dictamen para un bien en BAJA.' });
-    }
-
-    // (Opcional pero recomendado) Evita dictámenes si el bien está BORRADOR
-    // Si quieres permitirlo, borra este bloque.
-    if (String(bien.estadoLogico).toUpperCase() === 'BORRADOR') {
-        return res.status(400).json({ error: 'No se puede crear dictamen para un bien en BORRADOR.' });
-    }
-
-    // (Opcional recomendado) Evita más de 1 dictamen BORRADOR para el mismo bien
-    const borradorExistente = await prisma.dictamenBien.findFirst({
-        where: { bienId: bien.id, estado: 'BORRADOR' as any },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    });
-    if (borradorExistente) {
-        return res.status(400).json({
-            error: `Ya existe un dictamen BORRADOR para este bien (ID: ${borradorExistente.id}).`,
-        });
-    }
-
     const tipo = tipoDictamenFromCategoria(bien);
 
-    const coordTipo = (coordinacion
-            ? String(coordinacion).toUpperCase()
-            : coordFromCategoria(bien)
-    ) as any;
+    const coordTipo = (coordinacion ? String(coordinacion).toUpperCase() : coordFromCategoria(bien)) as any;
 
-    const cfg = await prisma.dictamenConfig.findUnique({
-        where: { coordinacion: coordTipo },
-    });
+    const cfg = await prisma.dictamenConfig.findUnique({ where: { coordinacion: coordTipo } });
     if (!cfg) return res.status(400).json({ error: `No existe configuración para coordinacion ${coordTipo}` });
 
     const created = await prisma.dictamenBien.create({
         data: {
             bienId: bien.id,
             tipo: tipo as any,
-
             coordinacionTipo: coordTipo,
             configId: cfg.id,
-
             unidadAdscripcion: unidadAdscripcion || null,
             ubicacionFisica: ubicacionFisica || (bien.ubicacion?.nombre ?? null),
             fecha: fecha ? new Date(fecha) : new Date(),
@@ -159,9 +132,8 @@ export async function createDictamen(req: Request, res: Response) {
         include: { bien: true },
     });
 
-    // ✅ Ya NO tocamos estadoLogico aquí (adiós EN_DICTAMEN)
-
-    return res.status(201).json(created);
+    // ✅ ya NO cambiamos estadoLogico del bien aquí
+    res.status(201).json(created);
 }
 
 export async function getDictamen(req: Request, res: Response) {
@@ -251,9 +223,7 @@ export async function listDictamenes(req: Request, res: Response) {
 
 export async function firmarDictamen(req: Request, res: Response) {
     const id = Number(req.params.id);
-
-    const user = (req as any).user || {};
-    const userId = user?.id ? Number(user.id) : null;
+    const userId = Number((req as any).user?.id);
 
     const d0 = await prisma.dictamenBien.findUnique({
         where: { id },
@@ -261,17 +231,12 @@ export async function firmarDictamen(req: Request, res: Response) {
     });
     if (!d0) return res.status(404).json({ error: 'No encontrado' });
 
-    // Evita re-firmar
-    if (String((d0 as any).estado).toUpperCase() === 'FIRMADO') {
-        return res.status(400).json({ error: 'Este dictamen ya está firmado.' });
-    }
-
-    // ✅ PERMISOS NUEVOS
+    // ✅ permisos
     if (!canSign(req, d0)) {
         return res.status(403).json({ error: 'No autorizado para firmar este dictamen.' });
     }
 
-    const tieneEscaneado = (d0?.DictamenArchivo || []).some(a =>
+    const tieneEscaneado = (d0.DictamenArchivo || []).some(a =>
         ['PDF', 'FOTO'].includes(String(a.tipo).toUpperCase())
     );
     if (!tieneEscaneado) {
@@ -288,8 +253,8 @@ export async function firmarDictamen(req: Request, res: Response) {
     const now = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
-        // 1) Firmar dictamen
-        const dictFirmado = await tx.dictamenBien.update({
+        // 1) firmar dictamen
+        const d1 = await tx.dictamenBien.update({
             where: { id },
             data: {
                 estado: 'FIRMADO' as any,
@@ -299,27 +264,47 @@ export async function firmarDictamen(req: Request, res: Response) {
             },
         });
 
-        // 2) Bien -> BAJA (automático)
+        // 2) bien -> BAJA
         await tx.inventoryItem.update({
-            where: { id: Number((d0 as any).bienId) },
-            data: { estadoLogico: 'BAJA' as any },
+            where: { id: d1.bienId },
+            data: { estadoLogico: EstadoBienLogico.BAJA },
         });
 
-        // 3) Cancelar resguardos del bien (ACTIVO o BORRADOR)
+        // 3) cancelar resguardos (ACTIVO y por si acaso BORRADOR)
         await tx.resguardoBien.updateMany({
-            where: {
-                bienId: Number((d0 as any).bienId),
-                estado: { in: ['ACTIVO', 'BORRADOR'] as any },
-            },
+            where: { bienId: d1.bienId, estado: EstadoResguardo.ACTIVO },
             data: {
-                estado: 'CANCELADO' as any,
+                estado: EstadoResguardo.CANCELADO,
                 canceladoAt: now,
                 ...(userId ? { canceladoPorId: userId } : {}),
             },
         });
 
-        return dictFirmado;
+        await tx.resguardoBien.updateMany({
+            where: { bienId: d1.bienId, estado: EstadoResguardo.BORRADOR },
+            data: {
+                estado: EstadoResguardo.CANCELADO,
+                canceladoAt: now,
+                ...(userId ? { canceladoPorId: userId } : {}),
+            },
+        });
+
+        return d1;
     });
+
+    // 4) movimiento
+    if (userId) {
+        await MovimientosService.registrarMovimiento({
+            bienId: updated.bienId,
+            usuarioId: userId,
+            tipo: TipoMovimiento.OTRO,
+            motivo: 'Bien en BAJA por dictamen FIRMADO (resguardo cancelado automáticamente)',
+            responsableAntes: '',
+            responsableDespues: '',
+            ubicacionAntes: '',
+            ubicacionDespues: '',
+        });
+    }
 
     res.json(updated);
 }
