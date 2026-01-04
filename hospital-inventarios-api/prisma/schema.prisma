@@ -24,6 +24,7 @@ enum TipoBien {
 }
 
 enum EstadoBienLogico {
+  BORRADOR
   ACTIVO
   EN_DICTAMEN
   BAJA
@@ -78,6 +79,18 @@ enum TipoArchivoDictamen {
   OTRO
 }
 
+enum EstadoResguardo {
+  BORRADOR
+  ACTIVO
+  CANCELADO
+}
+
+enum TipoArchivoResguardo {
+  RESGUARDO_FIRMADO
+  RESGUARDO_CANCELADO
+  OTRO
+}
+
 model User {
   id        Int      @id @default(autoincrement())
   name      String
@@ -90,12 +103,16 @@ model User {
   MovimientoBien MovimientoBien[]
   DictamenBien   DictamenBien[]
   ArchivoBien    ArchivoBien[]
-
-  InventoryItem InventoryItem[]
+  InventoryItem  InventoryItem[]
 
   itemsCreados InventoryItem[] @relation("ItemsCreados")
 
   DictamenArchivo DictamenArchivo[]
+
+  // NUEVO
+  resguardosCreados    ResguardoBien[]    @relation("ResguardoCreadoPor")
+  resguardoArchivos    ResguardoArchivo[]
+  resguardosCancelados ResguardoBien[]    @relation("ResguardoCanceladoPor")
 }
 
 model EstadoFisico {
@@ -112,6 +129,8 @@ model Ubicacion {
   nombre String
   orden  Int             @default(99)
   items  InventoryItem[]
+
+  ResguardoBien ResguardoBien[]
 }
 
 model ClasificacionBien {
@@ -163,9 +182,11 @@ model InventoryItem {
   dictamenes  DictamenBien[]
   archivos    ArchivoBien[]
 
+  // NUEVO: historial de resguardos
+  resguardos ResguardoBien[]
+
   tipo TipoBien @default(ADMINISTRATIVO) @map("tipo_bien")
 
-  // 👇 NUEVO
   tipoPropiedad TipoPropiedadBien @default(PROPIO)
 
   proveedorId Int?
@@ -185,7 +206,56 @@ model InventoryItem {
 
   @@index([no_inventario])
   @@index([responsable])
-  @@index([proveedorId]) // 👈 opcional pero recomendable
+  @@index([proveedorId])
+}
+
+model ResguardoBien {
+  id     Int           @id @default(autoincrement())
+  bienId Int
+  bien   InventoryItem @relation(fields: [bienId], references: [id])
+
+  estado EstadoResguardo @default(BORRADOR)
+
+  // snapshot del responsable y rfc que se firma en ese resguardo
+  responsable String @db.VarChar(255)
+  rfc         String @db.VarChar(25)
+
+  // snapshot de ubicación (opcional)
+  ubicacionId Int?
+  ubicacion   Ubicacion? @relation(fields: [ubicacionId], references: [id])
+
+  creadoPorId Int?
+  creadoPor   User? @relation("ResguardoCreadoPor", fields: [creadoPorId], references: [id])
+
+  canceladoAt    DateTime?
+  canceladoPorId Int?
+  canceladoPor   User?     @relation("ResguardoCanceladoPor", fields: [canceladoPorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  archivos ResguardoArchivo[]
+
+  @@index([bienId])
+  @@index([estado])
+}
+
+model ResguardoArchivo {
+  id Int @id @default(autoincrement())
+
+  resguardoId Int
+  resguardo   ResguardoBien @relation(fields: [resguardoId], references: [id])
+
+  tipo     TipoArchivoResguardo
+  nombre   String               @db.VarChar(255)
+  filePath String               @db.VarChar(500)
+
+  uploadedAt DateTime @default(now())
+
+  uploadedById Int
+  uploadedBy   User @relation(fields: [uploadedById], references: [id])
+
+  @@index([resguardoId])
 }
 
 model AuthorizerGroup {
@@ -217,7 +287,6 @@ model MovimientoBien {
   tipo   TipoMovimiento
   motivo String         @db.VarChar(500)
 
-  // Para trazabilidad de cambios de responsable / ubicación
   responsableAntes   String? @db.VarChar(255)
   responsableDespues String? @db.VarChar(255)
   ubicacionAntes     String? @db.VarChar(255)
@@ -238,7 +307,6 @@ model DictamenBien {
 
   folio String? @unique @db.VarChar(50)
 
-  // Para seleccionar plantilla (TI/Mantenimiento)
   coordinacionTipo CoordinacionDictamen
   configId         Int?
   config           DictamenConfig?      @relation(fields: [configId], references: [id])
@@ -248,7 +316,6 @@ model DictamenBien {
   ubicacionFisica   String?      @db.VarChar(255)
   fecha             DateTime     @default(now())
 
-  // Texto libre del dictamen ("Descripción clara y precisa...")
   dictamenTexto String
 
   estado EstadoDictamen @default(BORRADOR)
@@ -274,14 +341,11 @@ model DictamenConfig {
 
   coordinacion CoordinacionDictamen @unique
 
-  // Texto que aparece arriba (ej. "COORDINACION DE TECNOLOGIAS DE LA INFORMACION")
   tituloCoordinacion String @db.VarChar(255)
 
-  // Campos del firmante (bloque inferior)
   firmanteNombre String @db.VarChar(255)
   firmantePuesto String @db.VarChar(255)
 
-  // Opcional: si después quieres firma/imagen
   firmaPath String? @db.VarChar(500)
   selloPath String? @db.VarChar(500)
 
@@ -320,7 +384,7 @@ model ArchivoBien {
 
   tipo     TipoArchivoBien
   nombre   String          @db.VarChar(255)
-  filePath String          @db.VarChar(500) // ruta en disco o URL (S3, etc.)
+  filePath String          @db.VarChar(500)
 
   uploadedAt DateTime @default(now())
 

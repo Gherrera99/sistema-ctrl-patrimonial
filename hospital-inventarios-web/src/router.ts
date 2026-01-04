@@ -15,15 +15,19 @@ const router = createRouter({
         // públicas
         { path: '/login', component: Login, meta: { public: true } },
 
-        // protegidas (por default)
+        // inventario (lista + modal)
         { path: '/', component: Inventario, meta: { requiresAuth: true } },
+        { path: '/inventario/:id', component: Inventario, meta: { requiresAuth: true } }, // ✅ NUEVA
+
+        // forms legacy (si quieres mantenerlos)
         { path: '/nuevo', component: ItemForm, meta: { requiresAuth: true } },
         { path: '/editar/:id', component: ItemForm, meta: { requiresAuth: true } },
+
         { path: '/autoridades', component: Authorizers, meta: { requiresAuth: true } },
         { path: '/ubicaciones', component: Ubicaciones, meta: { requiresAuth: true } },
+
         { path: '/dictamenes', component: Dictamenes, meta: { requiresAuth: true, permission: 'dictamen:read' } },
         { path: '/dictamenes/:id', component: Dictamenes, meta: { requiresAuth: true, permission: 'dictamen:read' } },
-
 
         // admin
         {
@@ -51,7 +55,6 @@ router.beforeEach(async (to) => {
 
     // Si la ruta es pública, deja pasar
     if ((to.meta as any)?.public) {
-        // si ya está logueado, opcionalmente lo mandas al home
         if (to.path === '/login' && auth.user) return '/';
         return true;
     }
@@ -61,7 +64,7 @@ router.beforeEach(async (to) => {
 
     // Permisos por ruta (si existe meta.permission)
     const perm = (to.meta as any)?.permission as string | undefined;
-    if (perm && !auth.can(perm)) return '/'; // o una ruta /403
+    if (perm && !auth.can(perm)) return '/';
 
     return true;
 });
