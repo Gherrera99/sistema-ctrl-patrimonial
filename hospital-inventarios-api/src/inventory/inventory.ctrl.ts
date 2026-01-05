@@ -66,6 +66,14 @@ async function getResguardoPreferBorrador(bienId: number) {
     });
 }
 
+export async function listClasificaciones(req: Request, res: Response) {
+    const rows = await prisma.clasificacionBien.findMany({
+        orderBy: [{ sigla: "asc" }],
+        select: { id: true, sigla: true, nombre: true },
+    });
+    res.json(rows);
+}
+
 /** GET /api/inventario  (listado + filtros) */
 export async function list(req: Request, res: Response) {
     const { q, responsable, ubicacionId, tipo, estadoId, estadoLogico, categoria } = req.query;
@@ -99,6 +107,9 @@ export async function list(req: Request, res: Response) {
             include: {
                 estado: { select: { id: true, code: true, label: true, orden: true } },
                 ubicacion: { select: { id: true, code: true, nombre: true, orden: true } },
+                // ✅ NUEVO
+                proveedor: { select: { id: true, nombre: true, rfc: true } },
+                clasificacion: { select: { id: true, sigla: true, nombre: true, cuenta: true } },
             },
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         });
@@ -116,6 +127,9 @@ export async function list(req: Request, res: Response) {
             include: {
                 estado: { select: { id: true, code: true, label: true, orden: true } },
                 ubicacion: { select: { id: true, code: true, nombre: true, orden: true } },
+                // ✅ NUEVO
+                proveedor: { select: { id: true, nombre: true, rfc: true } },
+                clasificacion: { select: { id: true, sigla: true, nombre: true, cuenta: true } },
             },
             orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         }),
@@ -142,7 +156,7 @@ export async function getOne(req: Request, res: Response) {
             estado: { select: { id: true, code: true, label: true, orden: true } },
             ubicacion: { select: { id: true, code: true, nombre: true, orden: true } },
             proveedor: true,
-            clasificacion: true,
+            clasificacion: { select: { id: true, sigla: true, nombre: true, cuenta: true } },
             archivos: { orderBy: { uploadedAt: 'desc' } },
             resguardos: {
                 orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -162,6 +176,7 @@ export async function create(req: Request, res: Response) {
         no_inventario,
         nombre,
         responsable,
+        clasificacionId,
         rfc,
         no_factura,
         fecha_adjudicacion,
@@ -197,6 +212,7 @@ export async function create(req: Request, res: Response) {
                 no_inventario: String(no_inventario),
                 nombre: String(nombre),
                 responsable: String(responsable),
+                ...(clasificacionId ? { clasificacion: { connect: { id: Number(clasificacionId) } } } : {}),
                 rfc: String(rfc),
                 no_factura: no_factura ? String(no_factura) : null,
                 fecha_adjudicacion: asDate(fecha_adjudicacion),
@@ -259,6 +275,7 @@ export async function update(req: Request, res: Response) {
         no_inventario,
         nombre,
         responsable,
+        clasificacionId,
         rfc,
         no_factura,
         fecha_adjudicacion,
@@ -309,6 +326,12 @@ export async function update(req: Request, res: Response) {
                 ...(no_inventario !== undefined ? { no_inventario: String(no_inventario) } : {}),
                 ...(nombre !== undefined ? { nombre: String(nombre) } : {}),
                 ...(responsable !== undefined ? { responsable: String(responsable) } : {}),
+                ...(clasificacionId !== undefined
+                    ? (clasificacionId
+                            ? { clasificacion: { connect: { id: Number(clasificacionId) } } }
+                            : { clasificacion: { disconnect: true } }
+                    )
+                    : {}),
                 ...(rfc !== undefined ? { rfc: String(rfc) } : {}),
                 ...(no_factura !== undefined ? { no_factura: no_factura ? String(no_factura) : null } : {}),
                 ...(fecha_adjudicacion !== undefined ? { fecha_adjudicacion: asDate(fecha_adjudicacion) } : {}),

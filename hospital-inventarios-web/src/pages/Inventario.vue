@@ -180,6 +180,15 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <button
+                class="btn-secondary"
+                type="button"
+                @click="openDocsModal"
+                title="Factura, resguardos, cancelaciones"
+            >
+              Documentos / Resguardos
+            </button>
+
             <a
                 v-if="item?.id"
                 class="btn-secondary"
@@ -188,7 +197,7 @@
                 rel="noopener"
                 title="Plantilla PDF del resguardo (según tu endpoint existente)"
             >
-              Resguardo PDF (plantilla)
+              Resguardo PDF
             </a>
 
             <button class="btn-secondary" @click="closeDetail" type="button">Cerrar</button>
@@ -228,68 +237,167 @@
             </div>
           </div>
 
-          <!-- Datos (vista / edición) -->
+          <!-- Datos del bien (compacto por secciones) -->
           <div class="grid md:grid-cols-2 gap-3">
+
+            <!-- Identificación -->
             <div class="card">
-              <div class="text-xs text-gray-500">No. inventario</div>
-              <div v-if="!editMode" class="font-medium">{{ item?.no_inventario }}</div>
-              <input v-else class="input mt-2" v-model.trim="form.no_inventario" />
+              <div class="font-semibold text-sm mb-2">Identificación</div>
+
+              <div class="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div class="text-xs text-gray-500">No. inventario</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.no_inventario }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.no_inventario" />
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">Tipo</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.tipo ?? '-' }}</div>
+                  <select v-else class="input mt-1" v-model="form.tipo">
+                    <option value="ADMINISTRATIVO">ADMINISTRATIVO</option>
+                    <option value="MEDICO">MEDICO</option>
+                  </select>
+                </div>
+
+                <div class="col-span-2">
+                  <div class="text-xs text-gray-500">Nombre</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.nombre }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.nombre" />
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">Categoría</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.categoria ?? '-' }}</div>
+                  <select v-else class="input mt-1" v-model="form.categoria">
+                    <option value="GENERAL">GENERAL</option>
+                    <option value="INFORMATICA">INFORMATICA</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">Clasificación</div>
+                  <div class="font-medium">
+                    <span v-if="item?.clasificacion">
+                      {{ item.clasificacion.sigla }}
+                      <span class="text-gray-500" v-if="item.clasificacion.cuenta">— {{ item.clasificacion.cuenta }}</span>
+                    </span>
+                    <span v-else>-</span>
+                  </div>
+                </div>
+
+              </div>
             </div>
 
+            <!-- Asignación -->
             <div class="card">
-              <div class="text-xs text-gray-500">Nombre</div>
-              <div v-if="!editMode" class="font-medium">{{ item?.nombre }}</div>
-              <input v-else class="input mt-2" v-model.trim="form.nombre" />
+              <div class="font-semibold text-sm mb-2">Asignación</div>
+
+              <div class="grid grid-cols-2 gap-3 text-sm">
+                <div class="col-span-2">
+                  <div class="text-xs text-gray-500">Responsable</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.responsable || '-' }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.responsable" />
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">RFC</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.rfc || '-' }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.rfc" />
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">Estado físico</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.estado?.label || '-' }}</div>
+                  <select v-else class="input mt-1" v-model="form.estadoId">
+                    <option value="">(Sin estado)</option>
+                    <option v-for="e in estados" :key="e.id" :value="String(e.id)">{{ e.label }}</option>
+                  </select>
+                </div>
+
+                <div class="col-span-2">
+                  <div class="text-xs text-gray-500">Ubicación</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.ubicacion?.nombre || '-' }}</div>
+                  <select v-else class="input mt-1" v-model="form.ubicacionId">
+                    <option value="">(Sin ubicación)</option>
+                    <option v-for="u in ubicaciones" :key="u.id" :value="String(u.id)">{{ u.nombre }}</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
+            <!-- Adquisición -->
             <div class="card">
-              <div class="text-xs text-gray-500">Responsable</div>
-              <div v-if="!editMode" class="font-medium">{{ item?.responsable || '-' }}</div>
-              <input v-else class="input mt-2" v-model.trim="form.responsable" />
+              <div class="font-semibold text-sm mb-2">Adquisición</div>
+
+              <div class="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div class="text-xs text-gray-500">Folio factura</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.no_factura || '-' }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.no_factura" placeholder="Folio / No. factura" />
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">Costo adquisición</div>
+                  <div v-if="!editMode" class="font-medium">
+                    {{ item?.costo_adquisicion != null ? moneyMXN.format(Number(item.costo_adquisicion)) : '-' }}
+                  </div>
+                  <input v-else class="input mt-1" type="number" step="0.01" v-model="form.costo_adquisicion" placeholder="0.00" />
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">Fecha adjudicación</div>
+                  <div v-if="!editMode" class="font-medium">{{ fmtDate(item?.fecha_adjudicacion) }}</div>
+                  <input v-else class="input mt-1" type="date" v-model="form.fecha_adjudicacion" />
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">Fecha entrega</div>
+                  <div v-if="!editMode" class="font-medium">{{ fmtDate(item?.fecha_entrega) }}</div>
+                  <input v-else class="input mt-1" type="date" v-model="form.fecha_entrega" />
+                </div>
+
+                <div class="col-span-2">
+                  <div class="text-xs text-gray-500">Proveedor</div>
+                  <div class="font-medium">
+                    {{ item?.proveedor?.nombre || item?.proveedor?.razonSocial || '-' }}
+                  </div>
+                </div>
+              </div>
             </div>
 
+            <!-- Características -->
             <div class="card">
-              <div class="text-xs text-gray-500">RFC</div>
-              <div v-if="!editMode" class="font-medium">{{ item?.rfc || '-' }}</div>
-              <input v-else class="input mt-2" v-model.trim="form.rfc" />
+              <div class="font-semibold text-sm mb-2">Características</div>
+
+              <div class="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <div class="text-xs text-gray-500">Marca</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.marca || '-' }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.marca" />
+                </div>
+
+                <div>
+                  <div class="text-xs text-gray-500">Modelo</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.modelo || '-' }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.modelo" />
+                </div>
+
+                <div class="col-span-2">
+                  <div class="text-xs text-gray-500">No. serie</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.no_serie || '-' }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.no_serie" />
+                </div>
+
+                <div class="col-span-2">
+                  <div class="text-xs text-gray-500">Tipo de propiedad</div>
+                  <div v-if="!editMode" class="font-medium">{{ item?.tipoPropiedad || '-' }}</div>
+                  <input v-else class="input mt-1" v-model.trim="form.tipoPropiedad" placeholder="Ej. PROPIO / COMODATO / ARRENDADO" />
+                </div>
+              </div>
             </div>
 
-            <div class="card">
-              <div class="text-xs text-gray-500">Tipo</div>
-              <div v-if="!editMode" class="font-medium">{{ item?.tipo ?? '-' }}</div>
-              <select v-else class="input mt-2" v-model="form.tipo">
-                <option value="ADMINISTRATIVO">ADMINISTRATIVO</option>
-                <option value="MEDICO">MEDICO</option>
-              </select>
-            </div>
-
-            <div class="card">
-              <div class="text-xs text-gray-500">Categoría</div>
-              <div v-if="!editMode" class="font-medium">{{ item?.categoria ?? '-' }}</div>
-              <select v-else class="input mt-2" v-model="form.categoria">
-                <option value="GENERAL">GENERAL</option>
-                <option value="INFORMATICA">INFORMATICA</option>
-              </select>
-            </div>
-
-            <div class="card">
-              <div class="text-xs text-gray-500">Ubicación</div>
-              <div v-if="!editMode" class="font-medium">{{ item?.ubicacion?.nombre || '-' }}</div>
-              <select v-else class="input mt-2" v-model="form.ubicacionId">
-                <option value="">(Sin ubicación)</option>
-                <option v-for="u in ubicaciones" :key="u.id" :value="String(u.id)">{{ u.nombre }}</option>
-              </select>
-            </div>
-
-            <div class="card">
-              <div class="text-xs text-gray-500">Estado físico</div>
-              <div v-if="!editMode" class="font-medium">{{ item?.estado?.label || '-' }}</div>
-              <select v-else class="input mt-2" v-model="form.estadoId">
-                <option value="">(Sin estado)</option>
-                <option v-for="e in estados" :key="e.id" :value="String(e.id)">{{ e.label }}</option>
-              </select>
-            </div>
-
+            <!-- Observaciones -->
             <div class="card md:col-span-2">
               <div class="text-xs text-gray-500">Observaciones</div>
               <div v-if="!editMode" class="mt-2 text-sm text-gray-800 whitespace-pre-wrap">
@@ -299,6 +407,135 @@
             </div>
           </div>
 
+          <!-- Resguardo activo (compacto) -->
+          <div class="card mt-4">
+            <div class="font-semibold text-sm mb-2">Resguardo activo</div>
+
+            <div v-if="!resguardoActivo" class="text-sm text-gray-500">
+              No hay resguardo ACTIVO.
+            </div>
+
+            <div v-else class="grid md:grid-cols-3 gap-3 text-sm">
+              <div>
+                <div class="text-xs text-gray-500">ID</div>
+                <div class="font-medium">#{{ resguardoActivo.id }}</div>
+              </div>
+
+              <div>
+                <div class="text-xs text-gray-500">Responsable</div>
+                <div class="font-medium">{{ resguardoActivo.responsable }}</div>
+                <div class="text-xs text-gray-500">RFC: {{ resguardoActivo.rfc || '-' }}</div>
+              </div>
+
+              <div>
+                <div class="text-xs text-gray-500">Ubicación</div>
+                <div class="font-medium">{{ resguardoActivo.ubicacion?.nombre || item?.ubicacion?.nombre || '-' }}</div>
+              </div>
+
+              <div class="md:col-span-3">
+                <div class="text-xs text-gray-500 mb-1">Archivos del resguardo</div>
+
+                <div v-if="!(resguardoActivo.archivos || []).length" class="text-sm text-gray-500">
+                  Sin archivos.
+                </div>
+
+                <div v-else class="flex flex-wrap gap-2">
+                  <a
+                      v-for="a in resguardoActivo.archivos"
+                      :key="a.id"
+                      class="inline-flex items-center gap-2 rounded-lg border px-2 py-1 text-sm hover:bg-gray-50"
+                      :href="a.filePath"
+                      target="_blank"
+                      rel="noopener"
+                  >
+                    <span class="badge badge-gray">{{ a.tipo }}</span>
+                    <span class="text-green-700">{{ a.nombre }}</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Movimientos -->
+          <div class="card mt-4">
+            <div class="font-semibold text-sm mb-2">Movimientos</div>
+
+            <div v-if="!item?.movimientos?.length" class="text-sm text-gray-500">Sin movimientos.</div>
+
+            <div v-else class="max-h-[220px] overflow-auto border rounded">
+              <div
+                  v-for="m in item.movimientos"
+                  :key="m.id"
+                  class="p-3 border-b last:border-b-0 text-sm"
+              >
+                <div class="flex items-center justify-between gap-3">
+                  <div class="font-medium">{{ m.tipo }}</div>
+                  <div class="text-xs text-gray-500">
+                    {{ m.createdAt ? String(m.createdAt).slice(0,19).replace('T',' ') : '-' }}
+                  </div>
+                </div>
+                <div class="text-gray-700 mt-1">{{ m.motivo }}</div>
+                <div class="text-xs text-gray-500 mt-1" v-if="m.responsableAntes || m.responsableDespues || m.ubicacionAntes || m.ubicacionDespues">
+                  <span v-if="m.responsableAntes || m.responsableDespues">
+                    Resp: {{ m.responsableAntes || '-' }} → {{ m.responsableDespues || '-' }}
+                  </span>
+                  <span v-if="(m.responsableAntes || m.responsableDespues) && (m.ubicacionAntes || m.ubicacionDespues)" class="text-gray-400"> · </span>
+                  <span v-if="m.ubicacionAntes || m.ubicacionDespues">
+                    Ubic: {{ m.ubicacionAntes || '-' }} → {{ m.ubicacionDespues || '-' }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Acciones -->
+          <div class="flex flex-wrap gap-2 mt-4">
+            <button v-if="canEdit && !editMode" class="btn" type="button" @click="enableEdit">
+              Editar
+            </button>
+
+            <button v-if="editMode" class="btn" type="button" @click="guardar" :disabled="loadingSave">
+              {{ loadingSave ? 'Guardando...' : 'Guardar cambios' }}
+            </button>
+
+            <button v-if="editMode" class="btn-secondary" type="button" @click="cancelEdit">
+              Cancelar edición
+            </button>
+
+            <button
+                v-if="canDelete"
+                class="btn-secondary"
+                type="button"
+                @click="eliminarItem"
+                :disabled="loadingDelete"
+                title="Solo ADMIN y solo si el bien está en BORRADOR"
+            >
+              {{ loadingDelete ? 'Eliminando...' : 'Eliminar (ADMIN)' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Documentos/Resguardos -->
+    <div v-if="showDocsModal" class="modal-backdrop" @click.self="closeDocsModal">
+      <div class="modal">
+        <div class="modal-head">
+          <div>
+            <div class="text-sm text-gray-500">Documentos</div>
+            <div class="text-lg font-semibold">
+              {{ item?.no_inventario }} — {{ item?.nombre }}
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button class="btn-secondary" @click="closeDocsModal" type="button">Cerrar</button>
+          </div>
+        </div>
+
+        <div class="modal-body">
+          <!-- AQUÍ pegas tal cual tus bloques existentes -->
+          <!-- 1) Archivos del bien (FACTURA) -->
           <!-- Archivos del bien -->
           <div class="card mt-4">
             <div class="font-semibold text-sm mb-2">Archivos del bien</div>
@@ -334,7 +571,7 @@
               Sin archivos aún.
             </div>
           </div>
-
+          <!-- 2) Resguardos (firmado / subir / cancelación / historial) -->
           <!-- Resguardos -->
           <div class="card mt-4">
             <div class="font-semibold text-sm mb-2">Resguardos (historial)</div>
@@ -499,67 +736,11 @@
               </div>
             </div>
           </div>
-
-          <!-- Movimientos -->
-          <div class="card mt-4">
-            <div class="font-semibold text-sm mb-2">Movimientos</div>
-
-            <div v-if="!item?.movimientos?.length" class="text-sm text-gray-500">Sin movimientos.</div>
-
-            <div v-else class="max-h-[220px] overflow-auto border rounded">
-              <div
-                  v-for="m in item.movimientos"
-                  :key="m.id"
-                  class="p-3 border-b last:border-b-0 text-sm"
-              >
-                <div class="flex items-center justify-between gap-3">
-                  <div class="font-medium">{{ m.tipo }}</div>
-                  <div class="text-xs text-gray-500">
-                    {{ m.createdAt ? String(m.createdAt).slice(0,19).replace('T',' ') : '-' }}
-                  </div>
-                </div>
-                <div class="text-gray-700 mt-1">{{ m.motivo }}</div>
-                <div class="text-xs text-gray-500 mt-1" v-if="m.responsableAntes || m.responsableDespues || m.ubicacionAntes || m.ubicacionDespues">
-                  <span v-if="m.responsableAntes || m.responsableDespues">
-                    Resp: {{ m.responsableAntes || '-' }} → {{ m.responsableDespues || '-' }}
-                  </span>
-                  <span v-if="(m.responsableAntes || m.responsableDespues) && (m.ubicacionAntes || m.ubicacionDespues)" class="text-gray-400"> · </span>
-                  <span v-if="m.ubicacionAntes || m.ubicacionDespues">
-                    Ubic: {{ m.ubicacionAntes || '-' }} → {{ m.ubicacionDespues || '-' }}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Acciones -->
-          <div class="flex flex-wrap gap-2 mt-4">
-            <button v-if="canEdit && !editMode" class="btn" type="button" @click="enableEdit">
-              Editar
-            </button>
-
-            <button v-if="editMode" class="btn" type="button" @click="guardar" :disabled="loadingSave">
-              {{ loadingSave ? 'Guardando...' : 'Guardar cambios' }}
-            </button>
-
-            <button v-if="editMode" class="btn-secondary" type="button" @click="cancelEdit">
-              Cancelar edición
-            </button>
-
-            <button
-                v-if="canDelete"
-                class="btn-secondary"
-                type="button"
-                @click="eliminarItem"
-                :disabled="loadingDelete"
-                title="Solo ADMIN y solo si el bien está en BORRADOR"
-            >
-              {{ loadingDelete ? 'Eliminando...' : 'Eliminar (ADMIN)' }}
-            </button>
-          </div>
+          <!-- Tip: si quieres, deja el historial de resguardos aquí también -->
         </div>
       </div>
     </div>
+
 
   </div>
 </template>
@@ -577,6 +758,7 @@ const API = '/api';
 const route = useRoute();
 const router = useRouter();
 
+const showDocsModal = ref(false);
 const error = ref('');
 const success = ref('');
 function clearMessages() { error.value = ''; success.value = ''; }
@@ -590,6 +772,9 @@ const isAdmin = computed(() => myRole.value === 'ADMIN');
 const isControl = computed(() => myRole.value === 'CONTROL_PATRIMONIAL');
 
 const openingId = ref<number | null>(null);
+
+const moneyMXN = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
+const fmtDate = (v?: any) => (v ? String(v).slice(0, 10) : '-');
 
 // listado
 const list = ref<any[]>([]);
@@ -613,6 +798,9 @@ const f = reactive({
   tipo: '',
   categoria: '',
 });
+
+function openDocsModal() { showDocsModal.value = true; }
+function closeDocsModal() { showDocsModal.value = false; }
 
 function limpiarFiltros() {
   f.q = '';
@@ -740,6 +928,14 @@ const form = reactive({
   categoria: 'GENERAL',
   ubicacionId: '',
   estadoId: '',
+  no_factura: '',
+  costo_adquisicion: '',
+  marca: '',
+  modelo: '',
+  no_serie: '',
+  tipoPropiedad: '',
+  fecha_adjudicacion: '',
+  fecha_entrega: '',
   observaciones: '',
 });
 
@@ -748,10 +944,23 @@ function fillFormFromItem(it: any) {
   form.nombre = it?.nombre || '';
   form.responsable = it?.responsable || '';
   form.rfc = it?.rfc || '';
-  form.tipo = (it?.tipo || 'ADMINISTRATIVO');
-  form.categoria = (it?.categoria || 'GENERAL');
+  form.tipo = it?.tipo || 'ADMINISTRATIVO';
+  form.categoria = it?.categoria || 'GENERAL';
   form.ubicacionId = it?.ubicacionId ? String(it.ubicacionId) : '';
   form.estadoId = it?.estadoId ? String(it.estadoId) : '';
+
+  form.no_factura = it?.no_factura || '';
+  form.costo_adquisicion = it?.costo_adquisicion != null ? String(it.costo_adquisicion) : '';
+
+  form.marca = it?.marca || '';
+  form.modelo = it?.modelo || '';
+  form.no_serie = it?.no_serie || '';
+
+  form.tipoPropiedad = it?.tipoPropiedad || '';
+
+  form.fecha_adjudicacion = it?.fecha_adjudicacion ? String(it.fecha_adjudicacion).slice(0,10) : '';
+  form.fecha_entrega = it?.fecha_entrega ? String(it.fecha_entrega).slice(0,10) : '';
+
   form.observaciones = it?.observaciones || '';
 }
 
@@ -865,6 +1074,8 @@ function closeDetail(opts: { syncRoute?: boolean } = {}) {
   editMode.value = false;
   resetUploads();
   item.value = null;
+  showDocsModal.value = false;
+  showDetail.value = false;
 
   // solo si estás en /inventario/:id vuelve a /
   if (syncRoute && route.params.id) {
@@ -903,9 +1114,21 @@ async function guardar() {
       rfc: form.rfc.trim(),
       tipo: form.tipo,
       categoria: form.categoria,
-      observaciones: form.observaciones?.trim() || null,
       ubicacionId: form.ubicacionId ? Number(form.ubicacionId) : null,
       estadoId: form.estadoId ? Number(form.estadoId) : null,
+
+      no_factura: form.no_factura?.trim() || null,
+      costo_adquisicion: form.costo_adquisicion,
+
+      marca: form.marca?.trim() || null,
+      modelo: form.modelo?.trim() || null,
+      no_serie: form.no_serie?.trim() || null,
+
+      tipoPropiedad: form.tipoPropiedad?.trim() || null,
+      fecha_adjudicacion: form.fecha_adjudicacion || null,
+      fecha_entrega: form.fecha_entrega || undefined,
+
+      observaciones: form.observaciones?.trim() || null,
     };
 
     await axios.put(`${API}/inventario/${item.value.id}`, payload);
@@ -1125,16 +1348,32 @@ async function exportar() {
       'Estado físico': i.estado?.label || '',
       'Tipo': i.tipo ?? i.tipo_bien ?? '',
       'Categoría': i.categoria ?? '',
-      'Fecha adj.': i.fecha_adjudicacion?.slice(0, 10) || '',
+
+      // ✅ NUEVO
+      'Folio factura': i.no_factura || '',
+      'Costo adquisición': i.costo_adquisicion ?? '',
+      'Fecha adjudicación': i.fecha_adjudicacion?.slice(0,10) || '',
+      'Fecha entrega': i.fecha_entrega?.slice(0,10) || '',
+      'Marca': i.marca || '',
+      'Modelo': i.modelo || '',
+      'No. serie': i.no_serie || '',
+      'Tipo propiedad': i.tipoPropiedad || '',
+      'Proveedor': i.proveedor?.nombre || '',
+      'Proveedor RFC': i.proveedor?.rfc || '',
+      'Clasificación sigla': i.clasificacion?.sigla || '',
+      'Clasificación nombre': i.clasificacion?.cuenta || '',
+      'Observaciones': i.observaciones || '',
     }));
 
+
+    const esc = (v: any) => {
+      const s = String(v ?? '').replaceAll('"', '""').replaceAll('\n', ' ').replaceAll('\r', ' ');
+      return `"${s}"`;
+    };
+
     const header = Object.keys(rows[0] || {}).join(',');
-    const lines = rows.map((r: any) =>
-        Object.values(r)
-            .map((v: any) => String(v).replaceAll('"', '""'))
-            .map((v: any) => (v.includes(',') ? `"${v}"` : v))
-            .join(',')
-    );
+    const lines = rows.map((r: any) => Object.values(r).map(esc).join(','));
+
 
     const csv = [header, ...lines].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });

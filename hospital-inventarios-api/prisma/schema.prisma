@@ -137,6 +137,7 @@ model ClasificacionBien {
   id     Int             @id @default(autoincrement())
   sigla  String          @unique
   nombre String?
+  cuenta String?         @db.VarChar(100)
   items  InventoryItem[]
 }
 
@@ -156,7 +157,6 @@ model InventoryItem {
   no_inventario       String   @unique @db.VarChar(20)
   nombre              String   @db.VarChar(255)
   consecutivo         Int?
-  cuenta              String?  @db.VarChar(100)
   otras_observaciones String?
   costo_adquisicion   Decimal? @db.Decimal(12, 2)
 
