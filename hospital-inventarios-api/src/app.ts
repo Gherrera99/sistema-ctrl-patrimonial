@@ -14,6 +14,7 @@ import usersRoutes from './users/users.routes.js';
 import movimientosRoutes from "./movimientos/movimientos.routes.js";
 import proveedoresRoutes from "./proveedores/proveedores.routes.js";
 import dictamenRoutes from './dictamen/dictamen.routes.js';
+import {inventoryImportRouter} from "./inventory/inventory.import.js";
 
 
 
@@ -26,7 +27,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 
-
+app.use("/api", inventoryImportRouter);
 app.use('/api/auth', authRoutes);
 app.use('/api/inventario', invRoutes);
 app.use('/api/authorizers', autzRoutes);

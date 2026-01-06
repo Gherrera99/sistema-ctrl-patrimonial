@@ -36,6 +36,13 @@
             <RouterLink v-if="auth.can('proveedores:read')" class="navlink" to="/proveedores">Proveedores</RouterLink>
             <RouterLink v-if="auth.isAdmin" class="navlink" to="/admin/usuarios">Usuarios</RouterLink>
             <RouterLink v-if="auth.can('dictamen:read')" class="navlink" to="/dictamenes">Dictámenes</RouterLink>
+            <RouterLink
+                v-if="auth.isAdmin || auth.user?.role === 'CONTROL_PATRIMONIAL'"
+                class="navlink"
+                to="/importar-inventario"
+            >
+              Importar Excel
+            </RouterLink>
           </div>
 
           <!-- RIGHT: Profile + Mobile -->
@@ -91,6 +98,14 @@
                   <RouterLink v-if="auth.can('proveedores:read')" class="ddlink" to="/proveedores" @click="closeAll">Proveedores</RouterLink>
                   <RouterLink v-if="auth.isAdmin" class="ddlink" to="/admin/usuarios" @click="closeAll">Usuarios</RouterLink>
                   <RouterLink v-if="auth.can('dictamen:read')" class="ddlink" to="/dictamenes" @click="closeAll">Dictámenes</RouterLink>
+                  <RouterLink
+                      v-if="auth.isAdmin || auth.user?.role === 'CONTROL_PATRIMONIAL'"
+                      class="ddlink"
+                      to="/importar-inventario"
+                      @click="closeAll"
+                  >
+                    Importar Excel
+                  </RouterLink>
                 </div>
 
                 <div class="border-t my-1"></div>
@@ -133,6 +148,14 @@
             <RouterLink v-if="auth.can('proveedores:read')" class="navlink-mobile" to="/proveedores" @click="mobileOpen=false">Proveedores</RouterLink>
             <RouterLink v-if="auth.isAdmin" class="navlink-mobile" to="/admin/usuarios" @click="mobileOpen=false">Usuarios</RouterLink>
             <RouterLink v-if="auth.can('dictamen:read')" class="navlink-mobile" to="/dictamenes" @click="mobileOpen=false">Dictámenes</RouterLink>
+            <RouterLink
+                v-if="auth.isAdmin || auth.user?.role === 'CONTROL_PATRIMONIAL'"
+                class="navlink"
+                to="/importar-inventario"
+            >
+              Importar Excel
+            </RouterLink>
+
           </div>
         </div>
       </div>
@@ -201,20 +224,25 @@ const prettyRole = computed(() => {
     ADMIN: 'Administrador',
     COLABORADOR: 'Colaborador',
     CONTROL_PATRIMONIAL: 'Control Patrimonial',
-    COORDINADOR_MANTENIMIENTO: 'Coord. Mantenimiento',
-    DIRECCION_ADMIN: 'Dirección Administrativa',
+    AUXILIAR_PATRIMONIAL: 'Auxiliar Patrimonial',
+    MANTENIMIENTO: 'Mantenimiento',
+    TECNOLOGIAS: 'Tecnologías',
   };
   return map[roleKey.value] || roleKey.value || '—';
 });
 
 const badgeClass = computed(() => {
   const r = roleKey.value;
+
   if (r === 'ADMIN') return 'badge badge-admin';
   if (r === 'CONTROL_PATRIMONIAL') return 'badge badge-control';
-  if (r.includes('COORDINADOR')) return 'badge badge-coord';
-  if (r.includes('DIRECCION')) return 'badge badge-dir';
+  if (r === 'AUXILIAR_PATRIMONIAL') return 'badge badge-aux';
+  if (r === 'MANTENIMIENTO') return 'badge badge-mant';
+  if (r === 'TECNOLOGIAS') return 'badge badge-tech';
+
   return 'badge badge-colab';
 });
+
 </script>
 
 <style scoped>
@@ -257,4 +285,8 @@ const badgeClass = computed(() => {
 .badge-coord { @apply bg-amber-50 text-amber-800 border-amber-200; }
 .badge-dir { @apply bg-purple-50 text-purple-700 border-purple-200; }
 .badge-colab { @apply bg-green-50 text-green-700 border-green-200; }
+.badge-aux { @apply bg-indigo-50 text-indigo-700 border-indigo-200; }
+.badge-mant { @apply bg-gray-50 text-gray-700 border-gray-200; }
+.badge-tech { @apply bg-emerald-50 text-emerald-700 border-emerald-200; }
+
 </style>

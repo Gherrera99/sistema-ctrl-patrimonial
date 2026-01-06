@@ -189,6 +189,16 @@
               Documentos / Resguardos
             </button>
 
+            <button
+                v-if="fotoHref"
+                class="btn-secondary"
+                type="button"
+                @click="openFotoPreview()"
+                title="Ver foto del bien"
+            >
+              Ver foto
+            </button>
+
             <a
                 v-if="item?.id"
                 class="btn-secondary"
@@ -394,6 +404,56 @@
                   <div v-if="!editMode" class="font-medium">{{ item?.tipoPropiedad || '-' }}</div>
                   <input v-else class="input mt-1" v-model.trim="form.tipoPropiedad" placeholder="Ej. PROPIO / COMODATO / ARRENDADO" />
                 </div>
+
+                <div class="col-span-2">
+                  <div class="text-xs text-gray-500">Foto</div>
+
+                  <div v-if="fotoHref" class="mt-1 flex flex-wrap items-center gap-2">
+                    <button
+                        type="button"
+                        class="btn-secondary btn-mini"
+                        @click="openFotoPreview()"
+                        :disabled="!fotoPreviewUrl"
+                        title="Vista previa"
+                    >
+                      Vista previa
+                    </button>
+
+                    <a
+                        class="btn-secondary btn-mini"
+                        :href="fotoHref"
+                        target="_blank"
+                        rel="noopener"
+                        title="Abrir enlace"
+                    >
+                      Abrir enlace
+                    </a>
+
+                    <span class="text-xs text-gray-500 break-all">
+                      {{ prettyUrl(fotoHref) }}
+                    </span>
+                  </div>
+
+                  <div v-else class="font-medium">-</div>
+
+                  <!-- thumbnail -->
+                  <div v-if="fotoPreviewUrl && !fotoPreviewError" class="mt-3">
+                    <div class="inline-block rounded-xl border bg-white p-2">
+                      <img
+                          :src="fotoPreviewUrl"
+                          alt="Foto del bien"
+                          class="h-24 w-auto rounded-lg object-cover cursor-zoom-in shadow-sm"
+                          @click="openFotoPreview()"
+                          @error="fotoPreviewError = true"
+                      />
+                    </div>
+                  </div>
+
+                  <div v-else-if="fotoHref" class="mt-2 text-xs text-gray-500">
+                    No se pudo generar vista previa. (Revisa permisos del Drive o usa URL directa de imagen)
+                  </div>
+                </div>
+
               </div>
             </div>
 
@@ -513,6 +573,55 @@
               {{ loadingDelete ? 'Eliminando...' : 'Eliminar (ADMIN)' }}
             </button>
           </div>
+
+          <!-- Visor de foto -->
+          <div
+              v-if="showFotoPreview"
+              class="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
+              @click.self="showFotoPreview = false"
+          >
+            <div class="w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-xl">
+              <div class="flex items-center justify-between gap-3 border-b bg-white p-3">
+                <div>
+                  <div class="text-sm font-semibold text-gray-900">Foto del bien</div>
+                  <div class="text-xs text-gray-500">
+                    {{ item?.no_inventario }} — {{ item?.nombre }}
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <a
+                      v-if="fotoHref"
+                      class="btn-secondary"
+                      :href="fotoHref"
+                      target="_blank"
+                      rel="noopener"
+                  >
+                    Abrir en pestaña
+                  </a>
+                  <button class="btn-secondary" type="button" @click="showFotoPreview = false">
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+
+              <div class="bg-gray-50 p-4">
+                <div v-if="fotoPreviewUrl && !fotoPreviewError" class="flex justify-center">
+                  <img
+                      :src="fotoPreviewUrl"
+                      alt="Foto del bien"
+                      class="max-h-[72vh] w-auto rounded-xl shadow"
+                      @error="fotoPreviewError = true"
+                  />
+                </div>
+
+                <div v-else class="text-sm text-gray-600">
+                  No se pudo mostrar la imagen aquí. Usa “Abrir en pestaña” para verla.
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
@@ -751,7 +860,6 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuth } from '../stores/auth';
 
-
 axios.defaults.withCredentials = true;
 
 const API = '/api';
@@ -762,7 +870,6 @@ const showDocsModal = ref(false);
 const error = ref('');
 const success = ref('');
 function clearMessages() { error.value = ''; success.value = ''; }
-
 
 const auth = useAuth();
 
@@ -797,6 +904,96 @@ const f = reactive({
   estadoId: '',
   tipo: '',
   categoria: '',
+});
+
+// modal detalle
+const showDetail = ref(false);
+const loadingDetail = ref(false);
+const item = ref<any | null>(null);
+
+const showFotoPreview = ref(false);
+const fotoPreviewError = ref(false);
+
+function isProbablyUrl(v: string) {
+  try { new URL(v); return true; } catch { return false; }
+}
+
+// Drive -> URL de preview (si el archivo es público)
+function driveFileId(raw: string) {
+  const s = (raw || "").trim();
+  if (!s) return "";
+
+  // https://drive.google.com/file/d/<ID>/view
+  const m1 = s.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
+  if (m1?.[1]) return m1[1];
+
+  // ...?id=<ID>
+  const m2 = s.match(/[?&]id=([^&]+)/i);
+  if (s.includes("drive.google.com") && m2?.[1]) return m2[1];
+
+  return "";
+}
+
+// ✅ Preview para <img> (sirve aunque sea HEIC)
+function drivePreviewUrl(raw: string) {
+  const id = driveFileId(raw);
+  if (!id) return "";
+  // sz = tamaño del thumbnail (w/h). Puedes ajustar.
+  return `https://drive.google.com/thumbnail?id=${id}&sz=w1200`;
+}
+
+const fotoRaw = computed(() => String(item.value?.fotoUrl ?? '').trim());
+
+const fotoHref = computed(() => {
+  const raw = fotoRaw.value;
+  return raw && isProbablyUrl(raw) ? raw : '';
+});
+
+const fotoPreviewUrl = computed(() => {
+  const raw = fotoHref.value;
+  if (!raw) return "";
+
+  // ✅ Si es Drive => usa thumbnail sí o sí
+  const id = driveFileId(raw);
+  if (id) return drivePreviewUrl(raw);
+
+  // Si es URL directa a imagen => úsala
+  const lower = raw.toLowerCase();
+  if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp") || lower.endsWith(".gif")) {
+    return raw;
+  }
+
+  return "";
+});
+
+function openFotoPreview() {
+  // si no hay preview, al menos abre el link
+  if (!fotoHref.value) return;
+
+  fotoPreviewError.value = false;
+
+  if (!fotoPreviewUrl.value) {
+    window.open(fotoHref.value, '_blank', 'noopener,noreferrer');
+    return;
+  }
+
+  showFotoPreview.value = true;
+}
+
+function prettyUrl(u: string) {
+  try {
+    const url = new URL(u);
+    const path = url.pathname.length > 40 ? url.pathname.slice(0, 40) + '…' : url.pathname;
+    return `${url.hostname}${path}`;
+  } catch {
+    return u;
+  }
+}
+
+// cuando cambia el item (o la foto), resetea errores/cierra visor
+watch(fotoRaw, () => {
+  fotoPreviewError.value = false;
+  showFotoPreview.value = false;
 });
 
 function openDocsModal() { showDocsModal.value = true; }
@@ -909,11 +1106,6 @@ function changePageSize() {
   page.value = 1;
   cargarListado();
 }
-
-// modal detalle
-const showDetail = ref(false);
-const loadingDetail = ref(false);
-const item = ref<any | null>(null);
 
 const editMode = ref(false);
 const loadingSave = ref(false);
@@ -1070,7 +1262,6 @@ async function openDetail(id: number, opts: { syncRoute?: boolean } = {}) {
 function closeDetail(opts: { syncRoute?: boolean } = {}) {
   const syncRoute = opts.syncRoute !== false;
 
-  showDetail.value = false;
   editMode.value = false;
   resetUploads();
   item.value = null;
@@ -1438,4 +1629,6 @@ watch(
 
 .file-input { @apply block w-full text-sm text-gray-700; }
 .file-input::file-selector-button { @apply mr-3 py-2 px-3 rounded border-0 bg-gray-200 text-gray-800 hover:bg-gray-300; }
+
+.btn-mini { @apply text-xs px-2 py-1 rounded-lg; }
 </style>

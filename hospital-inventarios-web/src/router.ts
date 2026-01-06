@@ -8,6 +8,7 @@ import Authorizers from './pages/Authorizers.vue';
 import Ubicaciones from './pages/Ubicaciones.vue';
 import Proveedores from './pages/Proveedores.vue';
 import Dictamenes from "./pages/Dictamenes.vue";
+import ImportInventario from "./pages/ImportInventario.vue";
 
 const router = createRouter({
     history: createWebHistory(),
@@ -18,6 +19,7 @@ const router = createRouter({
         // inventario (lista + modal)
         { path: '/', component: Inventario, meta: { requiresAuth: true } },
         { path: '/inventario/:id', component: Inventario, meta: { requiresAuth: true } }, // ✅ NUEVA
+        { path: '/importar-inventario', component: ImportInventario, meta: { requiresAuth: true } },
 
         // forms legacy (si quieres mantenerlos)
         { path: '/nuevo', component: ItemForm, meta: { requiresAuth: true } },

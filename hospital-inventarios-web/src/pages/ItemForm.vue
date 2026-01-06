@@ -122,9 +122,13 @@
                     {{ formatClasificacion(c) }}
                   </option>
                 </select>
-                <p class="help" v-if="f.clasificacionId">
-                  Se guardará la clasificación seleccionada para este bien.
+                <p class="help" v-if="selectedClasificacion">
+                  Seleccionada:
+                  <b>{{ selectedClasificacion.sigla }}</b>
+                  <span v-if="selectedClasificacion.cuenta"> · Cuenta: <b>{{ selectedClasificacion.cuenta }}</b></span>
+                  <span v-if="selectedClasificacion.nombre"> · {{ selectedClasificacion.nombre }}</span>
                 </p>
+
               </div>
 
               <div>
@@ -252,7 +256,51 @@
                 <label class="label">No. serie</label>
                 <input class="input" v-model.trim="f.noSerie" placeholder="Ej. CXS484948" />
               </div>
+
+              <!-- ✅ Foto (link) dentro del grid -->
+              <div class="md:col-span-2">
+                <label class="label">Foto (link)</label>
+                <input
+                    class="input"
+                    v-model.trim="f.fotoUrl"
+                    placeholder="Pega aquí el enlace (Drive, OneDrive o URL directa)"
+                />
+
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                  <a
+                      v-if="f.fotoUrl && isProbablyUrl(f.fotoUrl)"
+                      class="btn-secondary"
+                      :href="f.fotoUrl"
+                      target="_blank"
+                      rel="noopener"
+                  >
+                    Abrir enlace
+                  </a>
+
+                  <span v-else class="help">
+                    Tip: pega un enlace válido para habilitar el botón “Abrir enlace”.
+                  </span>
+                </div>
+
+                <!-- ✅ preview suave (opcional) -->
+                <div v-if="fotoPreviewUrl" class="mt-3">
+                  <div class="text-xs text-gray-500 mb-1">Vista previa:</div>
+                  <div class="rounded-xl border bg-white p-2 inline-block">
+                    <img
+                        :src="fotoPreviewUrl"
+                        alt="Foto del bien"
+                        class="h-28 w-auto rounded-lg object-cover"
+                        @error="onFotoPreviewError"
+                    />
+                  </div>
+                  <p class="help mt-2">
+                    Si no se muestra, revisa permisos del Drive (debe permitir ver) o usa una URL directa de imagen.
+                  </p>
+                </div>
+              </div>
             </div>
+
+
           </section>
 
           <hr class="border-gray-100" />
@@ -375,6 +423,7 @@ const f = reactive({
 
   // ✅ NUEVO: clasificacion
   clasificacionId: null as number | null,
+  fotoUrl:'',
 });
 
 const ubicaciones = reactive<Ubicacion[]>([]);
@@ -383,6 +432,56 @@ const proveedores = reactive<any[]>([]);
 
 // ✅ NUEVO: clasificaciones
 const clasificaciones = reactive<Clasificacion[]>([]);
+
+const selectedClasificacion = computed(() => {
+  if (!f.clasificacionId) return null;
+  return clasificaciones.find(c => c.id === f.clasificacionId) || null;
+});
+
+function isProbablyUrl(v: string) {
+  try { new URL(v); return true; } catch { return false; }
+}
+
+// Convierte links de Drive tipo /file/d/ID/view a un link usable para preview (si el archivo es público)
+function drivePreviewUrl(raw: string) {
+  const s = (raw || '').trim();
+  if (!s) return '';
+
+  // casos típicos:
+  // https://drive.google.com/file/d/<ID>/view?usp=sharing
+  const m1 = s.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
+  if (m1?.[1]) return `https://drive.google.com/uc?export=view&id=${m1[1]}`;
+
+  // https://drive.google.com/open?id=<ID>
+  const m2 = s.match(/[?&]id=([^&]+)/i);
+  if (s.includes('drive.google.com') && m2?.[1]) return `https://drive.google.com/uc?export=view&id=${m2[1]}`;
+
+  return '';
+}
+
+const fotoPreviewUrl = computed(() => {
+  const raw = (f.fotoUrl || '').trim();
+  if (!raw) return '';
+
+  // si es drive, intento URL para preview
+  const drive = drivePreviewUrl(raw);
+  if (drive) return drive;
+
+  // si parece imagen directa, la usamos tal cual
+  const lower = raw.toLowerCase();
+  if (lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.webp') || lower.endsWith('.gif')) {
+    return raw;
+  }
+
+  return '';
+});
+
+function onFotoPreviewError(e: Event) {
+  // si falla el preview, lo ocultamos (evita que se vea "roto")
+  const img = e.target as HTMLImageElement | null;
+  if (img) img.style.display = 'none';
+}
+
 
 // helpers
 function toISODate(d: string | null | undefined) {
@@ -446,6 +545,8 @@ async function loadIfEdit(){
 
   // ✅ NUEVO
   f.clasificacionId    = data.clasificacionId ?? null;
+  f.fotoUrl            = data.fotoUrl ?? '';
+
 }
 
 async function onSubmit(){
@@ -487,6 +588,7 @@ async function onSubmit(){
 
     // ✅ NUEVO
     clasificacionId:    f.clasificacionId ?? null,
+    fotoUrl: f.fotoUrl.trim() || null,
   };
 
   if (isEdit.value) {
@@ -526,4 +628,7 @@ onMounted(async ()=>{
   hover:bg-gray-50
   focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2;
 }
+
+.help { @apply mt-1 text-xs text-gray-500; }
+
 </style>

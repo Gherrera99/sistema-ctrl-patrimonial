@@ -192,6 +192,8 @@ export async function create(req: Request, res: Response) {
         costo_adquisicion,
         proveedorId,
         tipoPropiedad,
+        fotoUrl,
+        foto,
     } = req.body || {};
 
     if (!no_inventario || !nombre) {
@@ -221,6 +223,8 @@ export async function create(req: Request, res: Response) {
                 no_serie: no_serie || null,
                 observaciones: observaciones || null,
                 fecha_entrega: asDate(fecha_entrega),
+
+                fotoUrl: (fotoUrl ?? foto) ? String(fotoUrl ?? foto).trim() : null,
 
                 categoria: categoria ? (String(categoria).toUpperCase() as CategoriaBien) : undefined,
                 tipo: (String(tipo || 'ADMINISTRATIVO').toUpperCase() as TipoBien),
@@ -293,6 +297,8 @@ export async function update(req: Request, res: Response) {
         estadoId,
         ubicacionId,
         tipo,
+        fotoUrl,
+        foto,
     } = req.body || {};
 
     const { userId, role } = auth(req);
@@ -341,6 +347,10 @@ export async function update(req: Request, res: Response) {
                 ...(observaciones !== undefined ? { observaciones: observaciones || null } : {}),
                 ...(fecha_entrega !== undefined ? { fecha_entrega: asDate(fecha_entrega) } : {}),
                 ...(tipo !== undefined ? { tipo: String(tipo).toUpperCase() as TipoBien } : {}),
+
+                ...(fotoUrl !== undefined || foto !== undefined
+                    ? { fotoUrl: (fotoUrl ?? foto) ? String(fotoUrl ?? foto).trim() : null }
+                    : {}),
 
                 ...(categoria !== undefined ? { categoria: String(categoria).toUpperCase() as CategoriaBien } : {}),
 
