@@ -33,6 +33,10 @@ function isAdmin(req: Request) {
     return String((req as any).user?.role || '') === 'ADMIN';
 }
 
+function isCtrlPatrimonial(req: Request) {
+    return String((req as any).user?.role || '') === 'CONTROL_PATRIMONIAL';
+}
+
 function isOwner(req: Request, dictamen: any) {
     const uid = Number((req as any).user?.id);
     return !!uid && Number(dictamen?.creadoPorId) === uid;
@@ -41,7 +45,7 @@ function isOwner(req: Request, dictamen: any) {
 function canEditDictamen(req: Request, dictamen: any) {
     // BORRADOR: creador o ADMIN
     if (String(dictamen?.estado) !== 'BORRADOR') return false;
-    return isAdmin(req) || isOwner(req, dictamen);
+    return isAdmin(req) || isOwner(req, dictamen || isCtrlPatrimonial(req));
 }
 
 function canUploadScan(req: Request, dictamen: any) {
@@ -53,7 +57,7 @@ function canUploadScan(req: Request, dictamen: any) {
     if (estado === 'BORRADOR') return isAdmin(req) || isOwner(req, dictamen);
 
     // FIRMADO: SOLO ADMIN (reemplazo permitido)
-    if (estado === 'FIRMADO') return isAdmin(req);
+    if (estado === 'FIRMADO') return isAdmin(req) || isCtrlPatrimonial(req);
 
     return false;
 }
@@ -61,7 +65,7 @@ function canUploadScan(req: Request, dictamen: any) {
 function canSign(req: Request, dictamen: any) {
     // Solo BORRADOR y solo creador/admin
     if (String(dictamen?.estado) !== 'BORRADOR') return false;
-    return isAdmin(req) || isOwner(req, dictamen);
+    return isAdmin(req) || isOwner(req, dictamen) || isCtrlPatrimonial(req);
 }
 
 export async function searchBienes(req: Request, res: Response) {

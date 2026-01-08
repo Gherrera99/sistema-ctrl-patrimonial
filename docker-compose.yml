@@ -34,14 +34,21 @@ services:
       - PDF_CONTROL_NAME=C. ABIB ALEXIS VALLEJOS PÉREZ
       - PDF_AUTH_ENTITY=HOSPITAL DE LA AMISTAD
     volumes:
-      - ./hospital-inventarios-api/assets:/app/assets:ro
-      - ./uploads:/app/uploads
+      - share_informatica25:/mnt/share
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8000:8000"
-    command: [ "npm", "start" ]     # 👈👈👈 CLAVE
+    command: [
+      "sh", "-lc",
+      "set -e; \
+             mkdir -p \"/mnt/share/Sistemas Hospital/sistema-ctrl-patrimonial/uploads/bien\"; \
+             rm -rf /app/uploads; \
+             ln -s \"/mnt/share/Sistemas Hospital/sistema-ctrl-patrimonial/uploads\" /app/uploads; \
+             ls -la /app/uploads; \
+             npm start"
+    ]     # 👈👈👈 CLAVE
   web:
     build:
       context: ./hospital-inventarios-web
@@ -50,4 +57,11 @@ services:
     container_name: hospital_web
     depends_on: [ api ]
     ports: [ "8081:80" ]
-volumes: { dbdata: {} }
+volumes:
+  dbdata: {}
+  share_informatica25:
+    driver: local
+    driver_opts:
+      type: cifs
+      device: "//192.168.1.10/Informatica25"
+      o: "username=Administrador,password=S3rv3r_2025*,vers=3.0,iocharset=utf8,noperm,file_mode=0664,dir_mode=0775"

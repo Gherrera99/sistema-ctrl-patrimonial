@@ -23,7 +23,7 @@
                 Registro y Control de Bienes
               </h1>
               <p class="hidden md:block text-xs text-gray-500">
-                Inventarios Hospital • Tech-Space Innovations
+                Hospital de la Amistad • Sistema de Control Patrimonial
               </p>
             </div>
           </div>

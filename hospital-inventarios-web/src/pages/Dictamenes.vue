@@ -437,6 +437,8 @@ const loadingList = ref(false);
 const myId = ref<number | null>(null);
 const myRole = ref<string>('');
 const isAdmin = computed(() => myRole.value === 'ADMIN');
+const isControl = computed(() => myRole.value === 'CONTROL_PATRIMONIAL');
+const isAuxControl = computed(() => myRole.value === 'AUXILIAR_PATRIMONIAL');
 
 // modals
 const showDetail = ref(false);
@@ -512,22 +514,22 @@ const isOwner = computed(() => {
 const canEdit = computed(() => {
   if (!dictamen.value?.id) return false;
   if (dictamen.value?.estado !== 'BORRADOR') return false;
-  return isAdmin.value || isOwner.value;
+  return isAdmin.value || isControl.value || isAuxControl.value || isOwner.value;
 });
 
 const canUpload = computed(() => {
   if (!dictamen.value?.id) return false;
   const estado = String(dictamen.value?.estado || '');
   if (estado === 'CANCELADO') return false;
-  if (estado === 'BORRADOR') return isAdmin.value || isOwner.value;
-  if (estado === 'FIRMADO') return isAdmin.value; // reemplazo permitido
+  if (estado === 'BORRADOR') return isAdmin.value || isControl.value || isAuxControl.value ||  isOwner.value;
+  if (estado === 'FIRMADO') return isAdmin.value || isControl.value; // reemplazo permitido
   return false;
 });
 
 const canSign = computed(() => {
   if (!dictamen.value?.id) return false;
   if (dictamen.value?.estado !== 'BORRADOR') return false;
-  return isAdmin.value || isOwner.value;
+  return isAdmin.value || isControl.value || isOwner.value;
 });
 
 function fillFormFromDictamen(d: any) {

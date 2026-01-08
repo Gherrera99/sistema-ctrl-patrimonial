@@ -40,7 +40,7 @@ export const useAuth = defineStore('auth', {
     getters: {
         isAdmin: (state) => state.user?.role === 'ADMIN',
         can: (state) => (perm: string) => {
-            if (state.user?.role === 'ADMIN') return true;
+            if (state.user?.role === 'ADMIN' || state.user?.role === 'CONTROL_PATRIMONIAL' || state.user?.role === 'AUXILIAR_PATRIMONIAL' || state.user?.role === 'TECNOLOGIAS' || state.user?.role === 'MANTENIMIENTO') return true;
             return Array.isArray(state.user?.permissions) && state.user.permissions.includes(perm);
         },
     },

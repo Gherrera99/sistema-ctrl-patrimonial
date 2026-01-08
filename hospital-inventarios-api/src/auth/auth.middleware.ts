@@ -9,9 +9,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'devsecret';
 // ✅ Permisos por rol (aquí es donde debe vivir, no en routes)
 const ROLE_PERMS: Record<string, string[]> = {
     ADMIN: ['*'],
-
-    CONTROL_PATRIMONIAL: ['*'], // si aplica
-    AUXILIAR_PATRIMONIAL: ['inventario:*', 'dictamen:read'],
+    CONTROL_PATRIMONIAL: [
+        'dictamen:read',
+        'dictamen:write',
+        'proveedores:read',
+        'proveedores:write',
+    ], // si aplica
+    AUXILIAR_PATRIMONIAL: [
+        'dictamen:read',
+        'dictamen:write',
+        'proveedores:read',
+        'proveedores:write',
+    ],
 
     MANTENIMIENTO: [
         'dictamen:read',
@@ -19,7 +28,11 @@ const ROLE_PERMS: Record<string, string[]> = {
         'proveedores:read',
     ],
 
-    TECNOLOGIAS: ['*'],
+    TECNOLOGIAS: [
+        'dictamen:read',
+        'proveedores:read',
+        'proveedores:write',
+    ],
 
     COLABORADOR: [
         'proveedores:read',

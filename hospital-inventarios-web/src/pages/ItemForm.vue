@@ -367,8 +367,8 @@
             <router-link to="/" class="btn-secondary">
               Cancelar
             </router-link>
-            <button class="btn" type="submit">
-              {{ isEdit ? 'Guardar cambios' : 'Guardar bien' }}
+            <button class="btn" :disabled="saving" type="submit">
+              {{ saving ? 'Guardando...' : 'Guardar bien' }}
             </button>
           </div>
 
@@ -382,7 +382,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, computed } from 'vue';
+import { onMounted, reactive, computed, ref } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import axios from 'axios';
 axios.defaults.withCredentials = true;
@@ -397,6 +397,8 @@ const API = '/api';
 const router = useRouter();
 const route  = useRoute();
 const isEdit = computed(()=> !!route.params.id);
+const saving = ref(false);
+
 
 // formulario reactivo (camelCase para el UI)
 const f = reactive({
@@ -511,7 +513,7 @@ async function loadCatalogs(){
 
   // ✅ NUEVO: cargar clasificaciones (si el endpoint existe)
   try {
-    const c = await axios.get<Clasificacion[]>(`${API}/clasificaciones`);
+    const c = await axios.get<Clasificacion[]>(`${API}/inventario/clasificaciones`);
     clasificaciones.splice(0, clasificaciones.length, ...(Array.isArray(c.data) ? c.data : []));
   } catch (err) {
     // si aún no tienes endpoint, no rompas el form
@@ -549,7 +551,9 @@ async function loadIfEdit(){
 
 }
 
-async function onSubmit(){
+async function onSubmit() {
+  if (saving.value) return; // ✅ evita doble submit
+
   // Validación mínima
   if (!f.noInventario.trim() || !f.nombre.trim()) {
     alert('No. inventario y nombre son obligatorios');
@@ -586,17 +590,25 @@ async function onSubmit(){
     tipoPropiedad:      f.tipoPropiedad || null,
     proveedorId:        f.proveedorId ?? null,
 
-    // ✅ NUEVO
     clasificacionId:    f.clasificacionId ?? null,
-    fotoUrl: f.fotoUrl.trim() || null,
+    fotoUrl:            f.fotoUrl.trim() || null,
   };
 
-  if (isEdit.value) {
-    await axios.put(`${API}/inventario/${route.params.id}`, payload);
-  } else {
-    await axios.post(`${API}/inventario`, payload);
+  saving.value = true;
+  try {
+    if (isEdit.value) {
+      await axios.put(`${API}/inventario/${route.params.id}`, payload);
+    } else {
+      await axios.post(`${API}/inventario`, payload);
+    }
+    router.push('/');
+  } catch (e: any) {
+    // ✅ mensaje claro si es duplicado (409 recomendado en backend)
+    const msg = e?.response?.data?.error || 'No se pudo guardar.';
+    alert(msg);
+  } finally {
+    saving.value = false;
   }
-  router.push('/');
 }
 
 onMounted(async ()=>{
@@ -630,5 +642,10 @@ onMounted(async ()=>{
 }
 
 .help { @apply mt-1 text-xs text-gray-500; }
+
+.btn:disabled {
+  @apply opacity-60 cursor-not-allowed;
+}
+
 
 </style>

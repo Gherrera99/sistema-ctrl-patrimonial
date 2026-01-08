@@ -287,13 +287,23 @@
 
                 <div>
                   <div class="text-xs text-gray-500">Clasificación</div>
-                  <div class="font-medium">
+
+                  <!-- Solo lectura -->
+                  <div v-if="!editMode" class="font-medium">
                     <span v-if="item?.clasificacion">
                       {{ item.clasificacion.sigla }}
                       <span class="text-gray-500" v-if="item.clasificacion.cuenta">— {{ item.clasificacion.cuenta }}</span>
                     </span>
                     <span v-else>-</span>
                   </div>
+
+                  <!-- Edición -->
+                  <select v-else class="input mt-1" v-model="form.clasificacionId">
+                    <option value="">(Sin clasificación)</option>
+                    <option v-for="c in clasificaciones" :key="c.id" :value="String(c.id)">
+                      {{ c.sigla }}<span v-if="c.cuenta"> — {{ c.cuenta }}</span>
+                    </option>
+                  </select>
                 </div>
 
               </div>
@@ -405,8 +415,19 @@
                   <input v-else class="input mt-1" v-model.trim="form.tipoPropiedad" placeholder="Ej. PROPIO / COMODATO / ARRENDADO" />
                 </div>
 
+                <!-- FOTO               -->
                 <div class="col-span-2">
                   <div class="text-xs text-gray-500">Foto</div>
+
+                  <!-- ✅ input para editar foto -->
+                  <div v-if="editMode" class="mt-2">
+                    <input
+                        class="input"
+                        v-model.trim="form.fotoUrl"
+                        placeholder="URL de la foto (Drive/URL directa)"
+                    />
+                    <p class="text-xs text-gray-500 mt-1">Pega una URL directa (termina en .jpg/.png) para vista previa.</p>
+                  </div>
 
                   <div v-if="fotoHref" class="mt-1 flex flex-wrap items-center gap-2">
                     <button
@@ -877,6 +898,7 @@ const myRole = computed(() => String(auth.user?.role || ''));
 const myUserId = computed(() => (auth.user?.id ? Number(auth.user.id) : null));
 const isAdmin = computed(() => myRole.value === 'ADMIN');
 const isControl = computed(() => myRole.value === 'CONTROL_PATRIMONIAL');
+const isAuxControl = computed(() => myRole.value === 'AUXILIAR_PATRIMONIAL');
 
 const openingId = ref<number | null>(null);
 
@@ -895,6 +917,8 @@ const totalPages = ref(1);
 // catálogos
 const ubicaciones = ref<any[]>([]);
 const estados = ref<any[]>([]);
+const clasificaciones = ref<any[]>([]);
+
 
 // filtros (alineados al backend)
 const f = reactive({
@@ -911,6 +935,32 @@ const showDetail = ref(false);
 const loadingDetail = ref(false);
 const item = ref<any | null>(null);
 
+const editMode = ref(false);
+const loadingSave = ref(false);
+const loadingDelete = ref(false);
+
+const form = reactive({
+  no_inventario: '',
+  nombre: '',
+  responsable: '',
+  rfc: '',
+  tipo: 'ADMINISTRATIVO',
+  categoria: 'GENERAL',
+  ubicacionId: '',
+  estadoId: '',
+  clasificacionId: '',
+  fotoUrl: '',
+  no_factura: '',
+  costo_adquisicion: '',
+  marca: '',
+  modelo: '',
+  no_serie: '',
+  tipoPropiedad: '',
+  fecha_adjudicacion: '',
+  fecha_entrega: '',
+  observaciones: '',
+});
+
 const showFotoPreview = ref(false);
 const fotoPreviewError = ref(false);
 
@@ -918,48 +968,53 @@ function isProbablyUrl(v: string) {
   try { new URL(v); return true; } catch { return false; }
 }
 
-// Drive -> URL de preview (si el archivo es público)
 function driveFileId(raw: string) {
   const s = (raw || "").trim();
   if (!s) return "";
 
-  // https://drive.google.com/file/d/<ID>/view
   const m1 = s.match(/drive\.google\.com\/file\/d\/([^/]+)/i);
   if (m1?.[1]) return m1[1];
 
-  // ...?id=<ID>
   const m2 = s.match(/[?&]id=([^&]+)/i);
   if (s.includes("drive.google.com") && m2?.[1]) return m2[1];
 
   return "";
 }
 
-// ✅ Preview para <img> (sirve aunque sea HEIC)
 function drivePreviewUrl(raw: string) {
   const id = driveFileId(raw);
   if (!id) return "";
-  // sz = tamaño del thumbnail (w/h). Puedes ajustar.
   return `https://drive.google.com/thumbnail?id=${id}&sz=w1200`;
 }
 
-const fotoRaw = computed(() => String(item.value?.fotoUrl ?? '').trim());
+/** ✅ fuente única:
+ * - editMode = usa form.fotoUrl
+ * - no editMode = usa item.fotoUrl
+ */
+const currentFoto = computed(() =>
+    String((editMode.value ? form.fotoUrl : item.value?.fotoUrl) ?? "").trim()
+);
 
 const fotoHref = computed(() => {
-  const raw = fotoRaw.value;
-  return raw && isProbablyUrl(raw) ? raw : '';
+  const raw = currentFoto.value;
+  if (!raw) return '';
+  if (raw.startsWith('/')) return raw; // ✅ ruta relativa (api/uploads)
+  return isProbablyUrl(raw) ? raw : '';
 });
+
 
 const fotoPreviewUrl = computed(() => {
   const raw = fotoHref.value;
   if (!raw) return "";
 
-  // ✅ Si es Drive => usa thumbnail sí o sí
   const id = driveFileId(raw);
   if (id) return drivePreviewUrl(raw);
 
-  // Si es URL directa a imagen => úsala
   const lower = raw.toLowerCase();
-  if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp") || lower.endsWith(".gif")) {
+  if (
+      lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+      lower.endsWith(".webp") || lower.endsWith(".gif")
+  ) {
     return raw;
   }
 
@@ -967,13 +1022,12 @@ const fotoPreviewUrl = computed(() => {
 });
 
 function openFotoPreview() {
-  // si no hay preview, al menos abre el link
   if (!fotoHref.value) return;
 
   fotoPreviewError.value = false;
 
   if (!fotoPreviewUrl.value) {
-    window.open(fotoHref.value, '_blank', 'noopener,noreferrer');
+    window.open(fotoHref.value, "_blank", "noopener,noreferrer");
     return;
   }
 
@@ -983,18 +1037,19 @@ function openFotoPreview() {
 function prettyUrl(u: string) {
   try {
     const url = new URL(u);
-    const path = url.pathname.length > 40 ? url.pathname.slice(0, 40) + '…' : url.pathname;
+    const path = url.pathname.length > 40 ? url.pathname.slice(0, 40) + "…" : url.pathname;
     return `${url.hostname}${path}`;
   } catch {
     return u;
   }
 }
 
-// cuando cambia el item (o la foto), resetea errores/cierra visor
-watch(fotoRaw, () => {
+/** ✅ cuando cambia el URL (por editar o por cambiar item) */
+watch(currentFoto, () => {
   fotoPreviewError.value = false;
   showFotoPreview.value = false;
 });
+
 
 function openDocsModal() { showDocsModal.value = true; }
 function closeDocsModal() { showDocsModal.value = false; }
@@ -1033,12 +1088,15 @@ function setEstado(s: 'ACTIVO'|'BORRADOR'|'BAJA') {
 
 async function cargarCatalogos() {
   try {
-    const [u, e] = await Promise.all([
+    const [u, e, c] = await Promise.all([
       axios.get(API + '/ubicaciones'),
       axios.get(API + '/estados-fisicos'),
+      axios.get(API + '/inventario/clasificaciones'),
     ]);
+
     ubicaciones.value = Array.isArray(u.data) ? u.data : [];
     estados.value = Array.isArray(e.data) ? e.data : [];
+    clasificaciones.value = Array.isArray(c.data) ? c.data : [];
   } catch (err) {
     // no rompas la pantalla si algo falla
     console.error(err);
@@ -1107,30 +1165,6 @@ function changePageSize() {
   cargarListado();
 }
 
-const editMode = ref(false);
-const loadingSave = ref(false);
-const loadingDelete = ref(false);
-
-const form = reactive({
-  no_inventario: '',
-  nombre: '',
-  responsable: '',
-  rfc: '',
-  tipo: 'ADMINISTRATIVO',
-  categoria: 'GENERAL',
-  ubicacionId: '',
-  estadoId: '',
-  no_factura: '',
-  costo_adquisicion: '',
-  marca: '',
-  modelo: '',
-  no_serie: '',
-  tipoPropiedad: '',
-  fecha_adjudicacion: '',
-  fecha_entrega: '',
-  observaciones: '',
-});
-
 function fillFormFromItem(it: any) {
   form.no_inventario = it?.no_inventario || '';
   form.nombre = it?.nombre || '';
@@ -1140,6 +1174,8 @@ function fillFormFromItem(it: any) {
   form.categoria = it?.categoria || 'GENERAL';
   form.ubicacionId = it?.ubicacionId ? String(it.ubicacionId) : '';
   form.estadoId = it?.estadoId ? String(it.estadoId) : '';
+  form.clasificacionId = it?.clasificacionId ? String(it.clasificacionId) : '';
+  form.fotoUrl = it?.fotoUrl ? String(it.fotoUrl) : '';
 
   form.no_factura = it?.no_factura || '';
   form.costo_adquisicion = it?.costo_adquisicion != null ? String(it.costo_adquisicion) : '';
@@ -1162,7 +1198,7 @@ const canEdit = computed(() => {
   const estado = String(item.value.estadoLogico || '').toUpperCase();
   const creatorOk = myUserId.value && item.value.createdById && Number(item.value.createdById) === Number(myUserId.value);
 
-  if (estado === 'BORRADOR') return isAdmin.value || creatorOk;
+  if (estado === 'BORRADOR') return isAdmin.value || isControl.value || isAuxControl.value || creatorOk;
   if (estado === 'ACTIVO') return isAdmin.value || isControl.value;
   return false; // EN_DICTAMEN / BAJA => no edit
 });
@@ -1173,7 +1209,9 @@ const canUploadDocs = computed(() => {
 });
 
 const canDelete = computed(() => {
-  return isAdmin.value && String(item.value?.estadoLogico || '').toUpperCase() === 'BORRADOR';
+  const estado = String(item.value?.estadoLogico || '').toUpperCase();
+  const r = String(auth.user?.role || '').toUpperCase();
+  return estado === 'BORRADOR' && ['ADMIN','CONTROL_PATRIMONIAL','AUXILIAR_PATRIMONIAL'].includes(r);
 });
 
 function tieneTipoArchivoBien(tipo: string) {
@@ -1307,6 +1345,8 @@ async function guardar() {
       categoria: form.categoria,
       ubicacionId: form.ubicacionId ? Number(form.ubicacionId) : null,
       estadoId: form.estadoId ? Number(form.estadoId) : null,
+      clasificacionId: form.clasificacionId ? Number(form.clasificacionId) : null,
+      fotoUrl: form.fotoUrl?.trim() || null,
 
       no_factura: form.no_factura?.trim() || null,
       costo_adquisicion: form.costo_adquisicion,

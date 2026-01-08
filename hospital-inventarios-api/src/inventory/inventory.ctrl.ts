@@ -266,8 +266,14 @@ export async function create(req: Request, res: Response) {
 
         return res.status(201).json(created);
     } catch (e: any) {
+        if (e?.code === 'P2002' && String(e?.meta?.target || '').includes('no_inventario')) {
+            return res.status(409).json({
+                error: `Ya existe un bien con el No. inventario: ${req.body.no_inventario}`,
+                field: 'no_inventario',
+            });
+        }
         console.error('[inventario.create] error', e);
-        return res.status(400).json({ error: 'No se pudo crear', detail: e?.message || String(e) });
+        return res.status(400).json({ error: 'No se pudo crear el bien.' });
     }
 }
 
@@ -315,8 +321,8 @@ export async function update(req: Request, res: Response) {
 
         // ✅ RBAC por estado
         if (before.estadoLogico === EstadoBienLogico.BORRADOR) {
-            if (!(role === Role.ADMIN || isCreator)) {
-                return res.status(403).json({ error: 'Solo ADMIN o el creador puede editar BORRADOR.' });
+            if (!(role === Role.ADMIN || role === Role.CONTROL_PATRIMONIAL || role === Role.AUXILIAR_PATRIMONIAL || isCreator)) {
+                return res.status(403).json({ error: 'Solo ADMIN, personal de control interno o el creador pueden editar BORRADOR.' });
             }
         } else if (before.estadoLogico === EstadoBienLogico.ACTIVO) {
             if (!(role === Role.ADMIN || role === Role.CONTROL_PATRIMONIAL)) {
@@ -449,7 +455,7 @@ export async function subirFactura(req: Request, res: Response) {
     const isCreator = userId && item.createdById && Number(item.createdById) === Number(userId);
 
     if (item.estadoLogico === EstadoBienLogico.BORRADOR) {
-        if (!(role === Role.ADMIN || isCreator)) return res.status(403).json({ error: 'No autorizado' });
+        if (!(role === Role.ADMIN || role === Role.CONTROL_PATRIMONIAL || role === Role.AUXILIAR_PATRIMONIAL || isCreator)) return res.status(403).json({ error: 'No autorizado' });
     } else if (item.estadoLogico === EstadoBienLogico.ACTIVO) {
         if (!(role === Role.ADMIN || role === Role.CONTROL_PATRIMONIAL)) return res.status(403).json({ error: 'No autorizado' });
     } else {
@@ -487,7 +493,7 @@ export async function subirResguardoFirmado(req: Request, res: Response) {
 
     // ✅ En BORRADOR: admin o creador. En ACTIVO: admin o control
     if (item.estadoLogico === 'BORRADOR') {
-        if (!(role === 'ADMIN' || isCreator)) return res.status(403).json({ error: 'No autorizado' });
+        if (!(role === 'ADMIN' || role === Role.CONTROL_PATRIMONIAL || role === Role.AUXILIAR_PATRIMONIAL || isCreator)) return res.status(403).json({ error: 'No autorizado' });
     } else if (item.estadoLogico === 'ACTIVO') {
         if (!(role === 'ADMIN' || role === 'CONTROL_PATRIMONIAL')) return res.status(403).json({ error: 'No autorizado' });
     } else {
@@ -545,7 +551,7 @@ export async function subirResguardoCancelado(req: Request, res: Response) {
     const { userId, role } = auth(req);
 
     if (!userId) return res.status(401).json({ error: 'No autenticado' });
-    if (!(role === Role.ADMIN || role === Role.CONTROL_PATRIMONIAL)) {
+    if (!(role === Role.ADMIN || role === Role.CONTROL_PATRIMONIAL || role === Role.AUXILIAR_PATRIMONIAL)) {
         return res.status(403).json({ error: 'Solo ADMIN o CONTROL_PATRIMONIAL puede subir cancelación.' });
     }
 
@@ -755,7 +761,15 @@ export async function remove(req: Request, res: Response) {
     const id = Number(req.params.id);
     const { role } = auth(req);
 
-    if (role !== Role.ADMIN) return res.status(403).json({ error: 'Solo ADMIN puede eliminar.' });
+    const allowed = new Set<Role>([
+        Role.ADMIN,
+        Role.CONTROL_PATRIMONIAL,
+        Role.AUXILIAR_PATRIMONIAL,
+    ]);
+
+    if (!allowed.has(role)) {
+        return res.status(403).json({ error: 'Solo ADMIN o Control Patrimonial pueden eliminar.' });
+    }
 
     const item = await prisma.inventoryItem.findUnique({ where: { id } });
     if (!item) return res.status(404).json({ error: 'No encontrado' });
@@ -765,10 +779,26 @@ export async function remove(req: Request, res: Response) {
     }
 
     try {
-        await prisma.inventoryItem.delete({ where: { id } });
-        res.json({ ok: true });
+        await prisma.$transaction(async (tx) => {
+            // 1) resguardo archivos -> resguardos
+            await tx.resguardoArchivo.deleteMany({ where: { resguardo: { bienId: id } } });
+            await tx.resguardoBien.deleteMany({ where: { bienId: id } });
+
+            // 2) archivos / dictamenes / movimientos del bien (si existen)
+            await tx.archivoBien.deleteMany({ where: { bienId: id } });
+            await tx.dictamenBien.deleteMany({ where: { bienId: id } });
+            await tx.movimientoBien.deleteMany({ where: { bienId: id } });
+
+            // 3) por último el bien
+            await tx.inventoryItem.delete({ where: { id } });
+        });
+
+        return res.json({ ok: true });
     } catch (e: any) {
         console.error('[inventario.remove] error', e);
-        res.status(400).json({ error: 'No se pudo eliminar', detail: e?.message || String(e) });
+        return res.status(400).json({
+            error: 'No se pudo eliminar',
+            detail: e?.message || String(e),
+        });
     }
 }

@@ -11,7 +11,7 @@ const r = Router();
 r.get('/', authGuard, ctrl.list);
 
 // src/routes/catalogos.routes.ts (o donde tengas tus rutas)
-r.get('/clasificaciones', listClasificaciones);
+r.get('/clasificaciones', authGuard, ctrl.listClasificaciones);
 
 
 // Acciones de archivos / flujo
