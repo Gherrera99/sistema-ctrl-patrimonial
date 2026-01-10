@@ -202,7 +202,7 @@
             <a
                 v-if="item?.id"
                 class="btn-secondary"
-                :href="`${API}/resguardo/${item.id}`"
+                :href="`${API}/resguardo/${item.id}?ts=${Date.now()}`"
                 target="_blank"
                 rel="noopener"
                 title="Plantilla PDF del resguardo (según tu endpoint existente)"
@@ -314,17 +314,52 @@
               <div class="font-semibold text-sm mb-2">Asignación</div>
 
               <div class="grid grid-cols-2 gap-3 text-sm">
+                <!-- Responsable -->
                 <div class="col-span-2">
                   <div class="text-xs text-gray-500">Responsable</div>
-                  <div v-if="!editMode" class="font-medium">{{ item?.responsable || '-' }}</div>
-                  <input v-else class="input mt-1" v-model.trim="form.responsable" />
+
+                  <!-- ✅ BORRADOR + editMode => select -->
+                  <select
+                      v-if="editMode && isBorrador"
+                      class="input mt-1"
+                      v-model="form.personalId"
+                  >
+                    <option value="">(Selecciona personal)</option>
+                    <option v-for="p in personal" :key="p.id" :value="String(p.id)">
+                      {{ p.nombre }} — {{ p.rfc }} — {{ p.puesto }}
+                    </option>
+                  </select>
+
+                  <!-- ✅ ACTIVO o solo lectura => texto -->
+                  <div v-else class="font-medium">
+                    {{ item?.responsable || '-' }}
+                  </div>
                 </div>
+
+
 
                 <div>
                   <div class="text-xs text-gray-500">RFC</div>
                   <div v-if="!editMode" class="font-medium">{{ item?.rfc || '-' }}</div>
-                  <input v-else class="input mt-1" v-model.trim="form.rfc" />
+                  <input
+                      v-else
+                      class="input mt-1"
+                      :value="isBorrador ? form.rfc : (item?.rfc || '')"
+                      disabled
+                  />
                 </div>
+
+                <div class="col-span-2">
+                  <div class="text-xs text-gray-500">Puesto del responsable</div>
+                  <div v-if="!editMode" class="font-medium">{{ puestoResponsable || '-' }}</div>
+                  <input
+                      v-else
+                      class="input mt-1"
+                      :value="isBorrador ? form.responsablePuesto : (puestoResponsable || '')"
+                      disabled
+                  />
+                </div>
+
 
                 <div>
                   <div class="text-xs text-gray-500">Estado físico</div>
@@ -792,15 +827,27 @@
               </div>
 
               <!-- Form nuevo resguardo -->
-              <div class="grid md:grid-cols-3 gap-2 mt-3">
+              <div class="grid md:grid-cols-4 gap-2 mt-3">
                 <div>
-                  <label class="label">Responsable nuevo</label>
-                  <input class="input" v-model.trim="cancelForm.responsableNuevo" placeholder="Nombre completo" />
+                  <label class="label">Responsable nuevo (catálogo)</label>
+                  <select class="input" v-model="cancelForm.personalIdNuevo">
+                    <option value="">(Selecciona personal)</option>
+                    <option v-for="p in personal" :key="p.id" :value="String(p.id)">
+                      {{ p.nombre }} — {{ p.rfc }} — {{ p.puesto }}
+                    </option>
+                  </select>
                 </div>
+
                 <div>
                   <label class="label">RFC nuevo</label>
-                  <input class="input" v-model.trim="cancelForm.rfcNuevo" placeholder="RFC" />
+                  <input class="input" :value="cancelForm.rfcNuevo" disabled />
                 </div>
+
+                <div>
+                  <label class="label">Puesto</label>
+                  <input class="input" :value="cancelForm.puestoNuevo" disabled />
+                </div>
+
                 <div>
                   <label class="label">Ubicación nueva (opcional)</label>
                   <select class="input" v-model="cancelForm.ubicacionIdNuevo">
@@ -809,6 +856,7 @@
                   </select>
                 </div>
               </div>
+
 
               <div class="mt-3 flex gap-2">
                 <button
@@ -899,6 +947,8 @@ const myUserId = computed(() => (auth.user?.id ? Number(auth.user.id) : null));
 const isAdmin = computed(() => myRole.value === 'ADMIN');
 const isControl = computed(() => myRole.value === 'CONTROL_PATRIMONIAL');
 const isAuxControl = computed(() => myRole.value === 'AUXILIAR_PATRIMONIAL');
+const isBorrador = computed(() => String(item.value?.estadoLogico || '').toUpperCase() === 'BORRADOR');
+
 
 const openingId = ref<number | null>(null);
 
@@ -918,6 +968,21 @@ const totalPages = ref(1);
 const ubicaciones = ref<any[]>([]);
 const estados = ref<any[]>([]);
 const clasificaciones = ref<any[]>([]);
+
+type Personal = { id:number; nombre:string; rfc:string; puesto:string };
+
+const personal = ref<Personal[]>([]);
+
+async function cargarPersonal() {
+  try {
+    const { data } = await axios.get<Personal[]>(`${API}/personal`);
+    personal.value = Array.isArray(data) ? data : [];
+  } catch (err) {
+    console.warn('No se pudo cargar /api/personal', err);
+    personal.value = [];
+  }
+}
+
 
 
 // filtros (alineados al backend)
@@ -944,6 +1009,8 @@ const form = reactive({
   nombre: '',
   responsable: '',
   rfc: '',
+  personalId: '' as string,          // guardamos string para v-model con select
+  responsablePuesto: '',
   tipo: 'ADMINISTRATIVO',
   categoria: 'GENERAL',
   ubicacionId: '',
@@ -960,6 +1027,22 @@ const form = reactive({
   fecha_entrega: '',
   observaciones: '',
 });
+
+const estadoItem = computed(() => String(item.value?.estadoLogico || '').toUpperCase());
+
+const canEditResponsableUI = computed(() => {
+  // ✅ solo se permite seleccionar personal desde edición cuando el BIEN está en BORRADOR
+  return estadoItem.value === 'BORRADOR';
+});
+
+const puestoResponsable = computed(() => {
+  // ✅ Si no hay ACTIVO (caso “cancelar resguardo”), usa BORRADOR
+  const r = resguardoActivo.value || resguardoBorrador.value;
+  return (r?.responsablePuesto || r?.personal?.puesto || '').trim();
+});
+
+
+
 
 const showFotoPreview = ref(false);
 const fotoPreviewError = ref(false);
@@ -1170,6 +1253,9 @@ function fillFormFromItem(it: any) {
   form.nombre = it?.nombre || '';
   form.responsable = it?.responsable || '';
   form.rfc = it?.rfc || '';
+  form.personalId = it?.personalId ? String(it.personalId) : '';
+  form.responsablePuesto = it?.responsablePuesto || '';
+
   form.tipo = it?.tipo || 'ADMINISTRATIVO';
   form.categoria = it?.categoria || 'GENERAL';
   form.ubicacionId = it?.ubicacionId ? String(it.ubicacionId) : '';
@@ -1331,16 +1417,22 @@ async function guardar() {
     error.value = 'No. inventario y nombre son obligatorios.';
     return;
   }
-  if (!form.responsable.trim()) { error.value = 'Responsable es obligatorio.'; return; }
-  if (!form.rfc.trim()) { error.value = 'RFC es obligatorio.'; return; }
+
+  // ✅ BORRADOR: sí requiere seleccionar personal
+  if (isBorrador.value && !form.personalId) {
+    error.value = 'Selecciona un responsable del catálogo.';
+    return;
+  }
 
   loadingSave.value = true;
+  const costoRaw = String(form.costo_adquisicion ?? '').trim();
+
   try {
+    // ✅ payload base (sin responsable/rfc)
     const payload: any = {
       no_inventario: form.no_inventario.trim(),
       nombre: form.nombre.trim(),
-      responsable: form.responsable.trim(),
-      rfc: form.rfc.trim(),
+
       tipo: form.tipo,
       categoria: form.categoria,
       ubicacionId: form.ubicacionId ? Number(form.ubicacionId) : null,
@@ -1349,7 +1441,7 @@ async function guardar() {
       fotoUrl: form.fotoUrl?.trim() || null,
 
       no_factura: form.no_factura?.trim() || null,
-      costo_adquisicion: form.costo_adquisicion,
+      costo_adquisicion: costoRaw !== '' ? Number(costoRaw) : null,
 
       marca: form.marca?.trim() || null,
       modelo: form.modelo?.trim() || null,
@@ -1362,7 +1454,16 @@ async function guardar() {
       observaciones: form.observaciones?.trim() || null,
     };
 
+    // ✅ SOLO en BORRADOR mandas datos de responsable
+    if (isBorrador.value) {
+      payload.personalId = Number(form.personalId);
+      payload.responsable = (form.responsable || '').trim();
+      payload.rfc = (form.rfc || '').trim();
+      payload.responsablePuesto = form.responsablePuesto || null;
+    }
+
     await axios.put(`${API}/inventario/${item.value.id}`, payload);
+
     await cargarDetalle(item.value.id);
     await cargarListado();
     success.value = '✅ Cambios guardados.';
@@ -1373,6 +1474,7 @@ async function guardar() {
     loadingSave.value = false;
   }
 }
+
 
 async function eliminarItem() {
   clearMessages();
@@ -1512,10 +1614,14 @@ async function subirResguardoCancelado() {
 
 // cancelar resguardo y crear nuevo borrador
 const cancelForm = reactive({
+  personalIdNuevo: '',
   responsableNuevo: '',
   rfcNuevo: '',
+  puestoNuevo: '',        // ✅ NUEVO
   ubicacionIdNuevo: '',
 });
+
+
 
 async function cancelarResguardo() {
   clearMessages();
@@ -1524,6 +1630,11 @@ async function cancelarResguardo() {
 
   if (!tieneResguardoCancelado.value) {
     error.value = 'Primero sube RESGUARDO_CANCELADO.';
+    return;
+  }
+
+  if (!cancelForm.personalIdNuevo) {
+    error.value = 'Selecciona un responsable del catálogo.';
     return;
   }
 
@@ -1537,13 +1648,19 @@ async function cancelarResguardo() {
     const payload: any = {
       responsableNuevo: cancelForm.responsableNuevo.trim(),
       rfcNuevo: cancelForm.rfcNuevo.trim(),
+      puestoNuevo: cancelForm.puestoNuevo?.trim() || null, // ✅
+      personalId: cancelForm.personalIdNuevo ? Number(cancelForm.personalIdNuevo) : null, // ✅
       ubicacionIdNuevo: cancelForm.ubicacionIdNuevo ? Number(cancelForm.ubicacionIdNuevo) : null,
     };
 
+
     await axios.post(`${API}/inventario/${item.value.id}/resguardo/cancelar`, payload);
+    cancelForm.personalIdNuevo = '';
     cancelForm.responsableNuevo = '';
     cancelForm.rfcNuevo = '';
+    cancelForm.puestoNuevo = '';
     cancelForm.ubicacionIdNuevo = '';
+
 
     await cargarDetalle(item.value.id);
     await cargarListado();
@@ -1622,12 +1739,16 @@ async function exportar() {
 }
 
 onMounted(async () => {
-  // auth.ensure() ya corre en el router guard, pero por seguridad:
   if (!auth.ready) await auth.ensure();
 
-  await cargarCatalogos();
+  await Promise.allSettled([
+    cargarCatalogos(),
+    cargarPersonal(),
+  ]);
+
   await cargarListado();
 });
+
 
 watch(
     () => route.params.id,
@@ -1642,6 +1763,51 @@ watch(
     },
     { immediate: true }
 );
+
+watch(() => form.personalId, (id) => {
+  if (!id) {
+    form.responsable = '';
+    form.rfc = '';
+    form.responsablePuesto = '';
+    return;
+  }
+  const p = personal.value.find(x => String(x.id) === String(id));
+  if (!p) return;
+  form.responsable = p.nombre;
+  form.rfc = p.rfc;
+  form.responsablePuesto = p.puesto;
+});
+
+watch(() => cancelForm.personalIdNuevo, (id) => {
+  if (!id) {
+    cancelForm.responsableNuevo = '';
+    cancelForm.rfcNuevo = '';
+    cancelForm.puestoNuevo = '';
+    return;
+  }
+  const p = personal.value.find(x => String(x.id) === String(id));
+  if (!p) return;
+  cancelForm.responsableNuevo = p.nombre;
+  cancelForm.rfcNuevo = p.rfc;
+  cancelForm.puestoNuevo = p.puesto || '';
+});
+
+watch(
+    () => form.personalId,
+    (v) => {
+      if (!v) return;
+
+      const p = (personal.value || []).find((x: any) => String(x.id) === String(v));
+      if (!p) return;
+
+      form.responsable = p.nombre || '';
+      form.rfc = p.rfc || '';
+      form.responsablePuesto = p.puesto || '';
+    }
+);
+
+
+
 
 </script>
 

@@ -9,6 +9,7 @@ import Ubicaciones from './pages/Ubicaciones.vue';
 import Proveedores from './pages/Proveedores.vue';
 import Dictamenes from "./pages/Dictamenes.vue";
 import ImportInventario from "./pages/ImportInventario.vue";
+import Personal from "./pages/Personal.vue";
 
 const router = createRouter({
     history: createWebHistory(),
@@ -30,6 +31,8 @@ const router = createRouter({
 
         { path: '/dictamenes', component: Dictamenes, meta: { requiresAuth: true, permission: 'dictamen:read' } },
         { path: '/dictamenes/:id', component: Dictamenes, meta: { requiresAuth: true, permission: 'dictamen:read' } },
+
+        { path: '/personal', component: Personal, meta: { requiresAuth: true } },
 
         // admin
         {

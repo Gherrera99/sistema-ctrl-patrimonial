@@ -65,6 +65,12 @@
             <input v-model.trim="f.name" placeholder="Nombre completo" class="input" :disabled="creating" />
           </div>
 
+          <div class="md:col-span-3">
+            <label class="label">Puesto</label>
+            <input v-model.trim="f.puesto" placeholder="Ej: Coordinador de TI" class="input" :disabled="creating" />
+          </div>
+
+
           <div class="md:col-span-4">
             <label class="label">Email <span class="req">*</span></label>
             <input v-model.trim="f.email" placeholder="usuario@correo.com" class="input" :disabled="creating" />
@@ -139,6 +145,7 @@
             <tr v-for="u in users" :key="u.id" class="border-t border-gray-100 hover:bg-gray-50/60">
               <td class="td">
                 <div class="font-medium text-gray-900">{{ u.name }}</div>
+                <div v-if="u.puesto" class="text-xs text-gray-500">{{ u.puesto }}</div>
                 <div class="text-xs text-gray-500">ID: {{ u.id }}</div>
               </td>
 
@@ -204,7 +211,7 @@
         <div class="flex items-start justify-between gap-3">
           <div>
             <h3 class="text-lg font-semibold text-gray-900">Editar usuario</h3>
-            <p class="text-xs text-gray-500">Actualiza nombre, email y rol.</p>
+            <p class="text-xs text-gray-500">Actualiza nombre, puesto, email y rol.</p>
           </div>
           <button class="btn-secondary-sm" type="button" @click="closeEdit">Cerrar</button>
         </div>
@@ -213,6 +220,11 @@
           <div>
             <label class="label">Nombre</label>
             <input class="input" v-model.trim="editForm.name" />
+          </div>
+
+          <div>
+            <label class="label">Puesto</label>
+            <input class="input" v-model.trim="editForm.puesto" />
           </div>
 
           <div>
@@ -305,7 +317,7 @@ type Role =
     | 'MANTENIMIENTO'
     | 'TECNOLOGIAS';
 
-type User = { id:number; name:string; email:string; role: Role };
+type User = { id:number; name:string; email:string; role: Role; puesto?: string | null };
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: 'COLABORADOR', label: 'Colaborador' },
@@ -325,7 +337,7 @@ function clearMessages(){ error.value=''; success.value=''; }
 
 const creating = ref(false);
 const showCreatePass = ref(false);
-const f = reactive({ name:'', email:'', password:'', role:'COLABORADOR' as Role });
+const f = reactive({ name:'', email:'', password:'', role:'COLABORADOR' as Role, puesto:'' });
 
 const savingId = ref<number | null>(null);
 const deletingId = ref<number | null>(null);
@@ -334,7 +346,7 @@ const deletingId = ref<number | null>(null);
 const editOpen = ref(false);
 const editUser = ref<User | null>(null);
 const savingEdit = ref(false);
-const editForm = reactive({ name:'', email:'', role:'COLABORADOR' as Role });
+const editForm = reactive({ name:'', email:'', role:'COLABORADOR' as Role, puesto:'' });
 
 const resetOpen = ref(false);
 const resetUser = ref<User | null>(null);
@@ -380,9 +392,9 @@ async function createUser(){
 
   creating.value = true;
   try {
-    await axios.post(API, { ...f, name: f.name.trim(), email: f.email.trim() });
+    await axios.post(API, { ...f, name: f.name.trim(), email: f.email.trim(), puesto: f.puesto?.trim() || null,});
     success.value = '✅ Usuario creado.';
-    Object.assign(f, { name:'', email:'', password:'', role:'COLABORADOR' });
+    Object.assign(f, { name:'', email:'', password:'', role:'COLABORADOR', puesto:'' });
     await load();
   } catch (e:any) {
     error.value = e?.response?.data?.error || 'No se pudo crear el usuario.';
@@ -395,7 +407,7 @@ async function saveRole(u: User){
   clearMessages();
   savingId.value = u.id;
   try {
-    await axios.put(`${API}/${u.id}`, { name: u.name, email: u.email, role: u.role });
+    await axios.put(`${API}/${u.id}`, { role: u.role });
     success.value = '✅ Rol actualizado.';
   } catch (e:any) {
     error.value = e?.response?.data?.error || 'No se pudo guardar.';
@@ -409,6 +421,7 @@ function openEdit(u: User){
   clearMessages();
   editUser.value = u;
   editForm.name = u.name;
+  editForm.puesto = (u.puesto ?? '');
   editForm.email = u.email;
   editForm.role = u.role;
   editOpen.value = true;
@@ -434,6 +447,7 @@ async function saveEdit(){
       name: editForm.name.trim(),
       email: editForm.email.trim(),
       role: editForm.role,
+      puesto: editForm.puesto?.trim() || null,
     });
     success.value = '✅ Usuario actualizado.';
     closeEdit();

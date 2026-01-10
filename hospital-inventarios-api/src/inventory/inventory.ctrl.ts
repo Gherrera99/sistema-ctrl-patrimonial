@@ -29,6 +29,32 @@ function auth(req: Request) {
     return { userId, role };
 }
 
+// const rawPersonalId = req.body?.personalId;
+// const personalIdNum =
+//     rawPersonalId !== undefined && rawPersonalId !== null && String(rawPersonalId).trim() !== ''
+//         ? Number(rawPersonalId)
+//         : null;
+//
+// const pSnap = await resolvePersonalSnapshot(personalIdNum);
+
+
+async function resolvePersonalSnapshot(personalId: any) {
+    if (!personalId) return null;
+
+    const id = Number(personalId);
+    if (!id || Number.isNaN(id)) return null;
+
+    const p = await prisma.personal.findUnique({ where: { id } });
+    if (!p || !p.activo) return null;
+
+    return {
+        personalId: p.id,
+        nombre: p.nombre,
+        rfc: p.rfc,
+        puesto: p.puesto,
+    };
+}
+
 async function getCurrentResguardo(bienId: number) {
     // ✅ Prioridad: BORRADOR (cuando hay cambio de responsable)
     const borrador = await prisma.resguardoBien.findFirst({
@@ -153,6 +179,7 @@ export async function getOne(req: Request, res: Response) {
     const item = await prisma.inventoryItem.findUnique({
         where: { id },
         include: {
+            personal: { select: { id: true, nombre: true, rfc: true, puesto: true } },
             estado: { select: { id: true, code: true, label: true, orden: true } },
             ubicacion: { select: { id: true, code: true, nombre: true, orden: true } },
             proveedor: true,
@@ -178,6 +205,7 @@ export async function create(req: Request, res: Response) {
         responsable,
         clasificacionId,
         rfc,
+        personalId,
         no_factura,
         fecha_adjudicacion,
         modelo,
@@ -196,26 +224,39 @@ export async function create(req: Request, res: Response) {
         foto,
     } = req.body || {};
 
+    const { userId } = auth(req);
+
+// ✅ si viene personalId, sobreescribe responsable/rfc desde catálogo
+    const pSnap = await resolvePersonalSnapshot(personalId);
+
+    const responsableFinal = pSnap ? pSnap.nombre : String(responsable || '').trim();
+    const rfcFinal = pSnap ? pSnap.rfc : String(rfc || '').trim();
+    const responsablePuestoFinal = pSnap ? pSnap.puesto : null;
+
+
     if (!no_inventario || !nombre) {
         return res.status(400).json({ error: 'no_inventario y nombre son obligatorios' });
     }
-    if (!responsable || !String(responsable).trim()) {
+    if (!responsableFinal || !String(responsableFinal).trim()) {
         return res.status(400).json({ error: 'responsable es obligatorio' });
     }
-    if (!rfc || !String(rfc).trim()) {
+    if (!rfcFinal || !String(rfcFinal).trim()) {
         return res.status(400).json({ error: 'rfc es obligatorio' });
     }
 
-    const { userId } = auth(req);
+// si mandaron personalId pero no existe/inactivo:
+    if (personalId && !pSnap) {
+        return res.status(400).json({ error: 'personalId inválido o inactivo' });
+    }
 
     try {
         const created = await prisma.inventoryItem.create({
             data: {
                 no_inventario: String(no_inventario),
                 nombre: String(nombre),
-                responsable: String(responsable),
+                responsable: String(responsableFinal),
                 ...(clasificacionId ? { clasificacion: { connect: { id: Number(clasificacionId) } } } : {}),
-                rfc: String(rfc),
+                rfc: String(rfcFinal),
                 no_factura: no_factura ? String(no_factura) : null,
                 fecha_adjudicacion: asDate(fecha_adjudicacion),
                 modelo: modelo || null,
@@ -250,8 +291,10 @@ export async function create(req: Request, res: Response) {
                 resguardos: {
                     create: {
                         estado: EstadoResguardo.BORRADOR,
-                        responsable: String(responsable),
-                        rfc: String(rfc),
+                        responsable: String(responsableFinal),
+                        rfc: String(rfcFinal),
+                        responsablePuesto: responsablePuestoFinal,
+                        ...(pSnap ? { personal: { connect: { id: pSnap.personalId } } } : {}),
                         ...(userId ? { creadoPor: { connect: { id: Number(userId) } } } : {}),
                         ...(ubicacionId ? { ubicacion: { connect: { id: Number(ubicacionId) } } } : {}),
                     },
@@ -287,6 +330,7 @@ export async function update(req: Request, res: Response) {
         responsable,
         clasificacionId,
         rfc,
+        personalId,
         no_factura,
         fecha_adjudicacion,
         modelo,
@@ -309,6 +353,26 @@ export async function update(req: Request, res: Response) {
 
     const { userId, role } = auth(req);
 
+    const pSnap = personalId !== undefined ? await resolvePersonalSnapshot(personalId) : null;
+
+// si mandaron personalId pero no existe/inactivo:
+    if (personalId && !pSnap) {
+        return res.status(400).json({ error: 'personalId inválido o inactivo' });
+    }
+
+    const responsableFinal =
+        personalId !== undefined
+            ? (pSnap ? pSnap.nombre : '') // (si es null -> lo limpias)
+            : (responsable !== undefined ? String(responsable).trim() : undefined);
+
+    const rfcFinal =
+        personalId !== undefined
+            ? (pSnap ? pSnap.rfc : '')
+            : (rfc !== undefined ? String(rfc).trim() : undefined);
+
+    const responsablePuestoFinal = pSnap ? pSnap.puesto : null;
+
+
     try {
         const before = await prisma.inventoryItem.findUnique({
             where: { id },
@@ -321,12 +385,40 @@ export async function update(req: Request, res: Response) {
 
         // ✅ RBAC por estado
         if (before.estadoLogico === EstadoBienLogico.BORRADOR) {
-            if (!(role === Role.ADMIN || role === Role.CONTROL_PATRIMONIAL || role === Role.AUXILIAR_PATRIMONIAL || isCreator)) {
-                return res.status(403).json({ error: 'Solo ADMIN, personal de control interno o el creador pueden editar BORRADOR.' });
+            const touchedResp = (personalId !== undefined) || (responsable !== undefined) || (rfc !== undefined);
+
+            if (touchedResp) {
+                const rb = await prisma.resguardoBien.findFirst({
+                    where: { bienId: id, estado: EstadoResguardo.BORRADOR },
+                    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+                });
+
+                if (rb) {
+                    await prisma.resguardoBien.update({
+                        where: { id: rb.id },
+                        data: {
+                            ...(personalId !== undefined
+                                ? (pSnap
+                                    ? { personal: { connect: { id: pSnap.personalId } } }
+                                    : { personal: { disconnect: true } })
+                                : {}),
+                            ...(responsableFinal !== undefined ? { responsable: String(responsableFinal) } : {}),
+                            ...(rfcFinal !== undefined ? { rfc: String(rfcFinal) } : {}),
+                            ...(personalId !== undefined ? { responsablePuesto: responsablePuestoFinal } : {}),
+                        },
+                    });
+                }
             }
         } else if (before.estadoLogico === EstadoBienLogico.ACTIVO) {
             if (!(role === Role.ADMIN || role === Role.CONTROL_PATRIMONIAL)) {
                 return res.status(403).json({ error: 'Solo ADMIN o CONTROL_PATRIMONIAL puede editar ACTIVO.' });
+            }
+
+            // ✅ Bloquea cambio de responsable directo en ACTIVO
+            if (personalId !== undefined || responsable !== undefined || rfc !== undefined) {
+                return res.status(400).json({
+                    error: 'En ACTIVO no se cambia responsable por edición. Usa Cancelar resguardo y crear nuevo BORRADOR.'
+                });
             }
         } else if (before.estadoLogico === EstadoBienLogico.BAJA) {
             return res.status(400).json({ error: 'Un bien en BAJA no es editable.' });
@@ -337,14 +429,20 @@ export async function update(req: Request, res: Response) {
             data: {
                 ...(no_inventario !== undefined ? { no_inventario: String(no_inventario) } : {}),
                 ...(nombre !== undefined ? { nombre: String(nombre) } : {}),
-                ...(responsable !== undefined ? { responsable: String(responsable) } : {}),
+                ...(personalId !== undefined
+                    ? (personalId
+                        ? { personal: { connect: { id: Number(personalId) } } }
+                        : { personal: { disconnect: true } })
+                    : {}),
+
+                ...(responsableFinal !== undefined ? { responsable: String(responsableFinal) } : {}),
+                ...(rfcFinal !== undefined ? { rfc: String(rfcFinal) } : {}),
                 ...(clasificacionId !== undefined
                     ? (clasificacionId
                             ? { clasificacion: { connect: { id: Number(clasificacionId) } } }
                             : { clasificacion: { disconnect: true } }
                     )
                     : {}),
-                ...(rfc !== undefined ? { rfc: String(rfc) } : {}),
                 ...(no_factura !== undefined ? { no_factura: no_factura ? String(no_factura) : null } : {}),
                 ...(fecha_adjudicacion !== undefined ? { fecha_adjudicacion: asDate(fecha_adjudicacion) } : {}),
                 ...(modelo !== undefined ? { modelo: modelo || null } : {}),
@@ -668,9 +766,29 @@ export async function cancelarResguardo(req: Request, res: Response) {
     if (!item) return res.status(404).json({ error: 'No encontrado' });
     if (item.estadoLogico !== EstadoBienLogico.ACTIVO) return res.status(400).json({ error: 'Solo aplica a bienes ACTIVO.' });
 
-    const { responsableNuevo, rfcNuevo, ubicacionIdNuevo } = req.body || {};
-    if (!responsableNuevo || !String(responsableNuevo).trim()) return res.status(400).json({ error: 'responsableNuevo requerido' });
-    if (!rfcNuevo || !String(rfcNuevo).trim()) return res.status(400).json({ error: 'rfcNuevo requerido' });
+    const { responsableNuevo, rfcNuevo, puestoNuevo, personalId, ubicacionIdNuevo } = req.body || {};
+
+    const pSnap = await resolvePersonalSnapshot(personalId);
+
+    // ✅ En tu UI el cambio es por catálogo, así que exígelo
+    if (!personalId) {
+        return res.status(400).json({ error: 'personalId requerido (selecciona personal del catálogo).' });
+    }
+
+    if (personalId && !pSnap) {
+        return res.status(400).json({ error: 'personalId inválido o inactivo' });
+    }
+
+    const responsableNuevoFinal = pSnap ? pSnap.nombre : String(responsableNuevo || '').trim();
+    const rfcNuevoFinal = pSnap ? pSnap.rfc : String(rfcNuevo || '').trim();
+    const puestoNuevoFinal = pSnap ? pSnap.puesto : (puestoNuevo ? String(puestoNuevo).trim() : null);
+
+// ✅ si NO mandaron personalId, exige responsable/rfc manual
+    if (!pSnap) {
+        if (!responsableNuevoFinal) return res.status(400).json({ error: 'responsableNuevo requerido' });
+        if (!rfcNuevoFinal) return res.status(400).json({ error: 'rfcNuevo requerido' });
+    }
+
 
     const activo = await prisma.resguardoBien.findFirst({
         where: { bienId: id, estado: EstadoResguardo.ACTIVO },
@@ -704,9 +822,14 @@ export async function cancelarResguardo(req: Request, res: Response) {
         await tx.inventoryItem.update({
             where: { id },
             data: {
-                responsable: String(responsableNuevo),
-                rfc: String(rfcNuevo),
+                responsable: String(responsableNuevoFinal),
+                rfc: String(rfcNuevoFinal),
                 ...(ubicNuevaId ? { ubicacion: { connect: { id: ubicNuevaId } } } : {}),
+
+                ...(pSnap
+                    ? { personal: { connect: { id: pSnap.personalId } } }     // si viene del catálogo
+                    : { personal: { disconnect: true } }
+                ),// si fue manual, quita el anterior
             },
         });
 
@@ -715,8 +838,10 @@ export async function cancelarResguardo(req: Request, res: Response) {
             data: {
                 bien: { connect: { id } },
                 estado: EstadoResguardo.BORRADOR,
-                responsable: String(responsableNuevo),
-                rfc: String(rfcNuevo),
+                responsable: String(responsableNuevoFinal),
+                rfc: String(rfcNuevoFinal),
+                responsablePuesto: puestoNuevoFinal,
+                ...(pSnap ? { personal: { connect: { id: pSnap.personalId } } } : {}),
                 creadoPor: { connect: { id: Number(userId) } },
                 ...(ubicNuevaId ? { ubicacion: { connect: { id: ubicNuevaId } } } : {}),
             },
@@ -724,14 +849,14 @@ export async function cancelarResguardo(req: Request, res: Response) {
     });
 
     // movimientos
-    if (responsableAntes !== String(responsableNuevo)) {
+    if (responsableAntes !== String(responsableNuevoFinal)) {
         await MovimientosService.registrarMovimiento({
             bienId: id,
             usuarioId: userId,
             tipo: TipoMovimiento.CAMBIO_RESPONSABLE,
             motivo: 'Cambio de responsable (nuevo resguardo)',
             responsableAntes,
-            responsableDespues: String(responsableNuevo),
+            responsableDespues: String(responsableNuevoFinal),
             ubicacionAntes: '',
             ubicacionDespues: '',
         });

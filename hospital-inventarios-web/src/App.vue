@@ -32,12 +32,13 @@
           <div class="hidden md:flex flex-1 items-center justify-center gap-2">
             <RouterLink class="navlink" to="/">Inventario</RouterLink>
             <RouterLink class="navlink" to="/ubicaciones">Ubicaciones</RouterLink>
+            <RouterLink class="navlink" to="/personal">Personal</RouterLink>
             <RouterLink v-if="auth.isAdmin" class="navlink" to="/autoridades">Autorizadores</RouterLink>
             <RouterLink v-if="auth.can('proveedores:read')" class="navlink" to="/proveedores">Proveedores</RouterLink>
             <RouterLink v-if="auth.isAdmin" class="navlink" to="/admin/usuarios">Usuarios</RouterLink>
             <RouterLink v-if="auth.can('dictamen:read')" class="navlink" to="/dictamenes">Dictámenes</RouterLink>
             <RouterLink
-                v-if="auth.isAdmin || auth.user?.role === 'CONTROL_PATRIMONIAL'"
+                v-if="auth.isAdmin"
                 class="navlink"
                 to="/importar-inventario"
             >
@@ -94,6 +95,7 @@
                 <div class="px-1 py-1 md:hidden">
                   <RouterLink class="ddlink" to="/" @click="closeAll">Inventario</RouterLink>
                   <RouterLink class="ddlink" to="/ubicaciones" @click="closeAll">Ubicaciones</RouterLink>
+                  <RouterLink class="ddlink" to="/personal" @click="closeAll">Personal</RouterLink>
                   <RouterLink v-if="auth.isAdmin" class="ddlink" to="/autoridades" @click="closeAll">Autorizadores</RouterLink>
                   <RouterLink v-if="auth.can('proveedores:read')" class="ddlink" to="/proveedores" @click="closeAll">Proveedores</RouterLink>
                   <RouterLink v-if="auth.isAdmin" class="ddlink" to="/admin/usuarios" @click="closeAll">Usuarios</RouterLink>
@@ -144,6 +146,7 @@
           <div class="mt-2 grid gap-2 rounded-2xl border bg-white p-3 shadow-sm">
             <RouterLink class="navlink-mobile" to="/" @click="mobileOpen=false">Inventario</RouterLink>
             <RouterLink class="navlink-mobile" to="/ubicaciones" @click="mobileOpen=false">Ubicaciones</RouterLink>
+            <RouterLink class="navlink-mobile" to="/personal" @click="mobileOpen=false">Personal</RouterLink>
             <RouterLink v-if="auth.isAdmin" class="navlink-mobile" to="/autoridades" @click="mobileOpen=false">Autorizadores</RouterLink>
             <RouterLink v-if="auth.can('proveedores:read')" class="navlink-mobile" to="/proveedores" @click="mobileOpen=false">Proveedores</RouterLink>
             <RouterLink v-if="auth.isAdmin" class="navlink-mobile" to="/admin/usuarios" @click="mobileOpen=false">Usuarios</RouterLink>

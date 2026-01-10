@@ -92,11 +92,14 @@ enum TipoArchivoResguardo {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     @default(COLABORADOR)
+  id       Int    @id @default(autoincrement())
+  name     String
+  email    String @unique
+  password String
+  role     Role   @default(COLABORADOR)
+
+  puesto String? @db.VarChar(255)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -113,6 +116,20 @@ model User {
   resguardosCreados    ResguardoBien[]    @relation("ResguardoCreadoPor")
   resguardoArchivos    ResguardoArchivo[]
   resguardosCancelados ResguardoBien[]    @relation("ResguardoCanceladoPor")
+}
+
+model Personal {
+  id     Int     @id @default(autoincrement())
+  nombre String  @db.VarChar(255)
+  rfc    String  @unique @db.VarChar(25)
+  puesto String  @db.VarChar(255)
+  activo Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resguardos    ResguardoBien[] // relación inversa opcional
+  InventoryItem InventoryItem[]
 }
 
 model EstadoFisico {
@@ -165,8 +182,12 @@ model InventoryItem {
 
   categoria CategoriaBien @default(GENERAL)
 
-  responsable        String    @db.VarChar(255)
-  rfc                String    @db.VarChar(25)
+  responsable String @db.VarChar(255)
+  rfc         String @db.VarChar(25)
+
+  personalId Int?
+  personal   Personal? @relation(fields: [personalId], references: [id])
+
   no_factura         String?   @db.VarChar(30)
   fecha_adjudicacion DateTime?
   modelo             String?   @db.VarChar(255)
@@ -207,6 +228,7 @@ model InventoryItem {
   @@index([no_inventario])
   @@index([responsable])
   @@index([proveedorId])
+  @@index([personalId])
 }
 
 model ResguardoBien {
@@ -216,11 +238,15 @@ model ResguardoBien {
 
   estado EstadoResguardo @default(BORRADOR)
 
-  // snapshot del responsable y rfc que se firma en ese resguardo
-  responsable String @db.VarChar(255)
-  rfc         String @db.VarChar(25)
+  // ✅ relación al catálogo (opcional)
+  personalId Int?
+  personal   Personal? @relation(fields: [personalId], references: [id])
 
-  // snapshot de ubicación (opcional)
+  // ✅ snapshots del responsable que firma ESTE resguardo
+  responsable       String  @db.VarChar(255)
+  rfc               String  @db.VarChar(25)
+  responsablePuesto String? @db.VarChar(255) // ✅ NUEVO
+
   ubicacionId Int?
   ubicacion   Ubicacion? @relation(fields: [ubicacionId], references: [id])
 
@@ -238,6 +264,7 @@ model ResguardoBien {
 
   @@index([bienId])
   @@index([estado])
+  @@index([personalId]) // ✅
 }
 
 model ResguardoArchivo {

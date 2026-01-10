@@ -15,6 +15,7 @@ import movimientosRoutes from "./movimientos/movimientos.routes.js";
 import proveedoresRoutes from "./proveedores/proveedores.routes.js";
 import dictamenRoutes from './dictamen/dictamen.routes.js';
 import {inventoryImportRouter} from "./inventory/inventory.import.js";
+import personalRoutes from "./personal/personal.routes.js";
 
 
 
@@ -39,6 +40,7 @@ app.use("/api/movimientos", movimientosRoutes);
 app.use("/api/proveedores", proveedoresRoutes); // 👈 NUEVO
 app.use('/api/dictamen', dictamenRoutes);
 app.use('/api/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.use("/api/personal", personalRoutes);
 
 // al final de app.ts, antes de export default app;
 app.use((err: any, _req, res, _next) => {

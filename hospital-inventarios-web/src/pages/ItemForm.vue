@@ -78,17 +78,23 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="label">
-                  Responsable <span class="req">*</span>
-                </label>
-                <input class="input" v-model.trim="f.responsable" placeholder="Ej. Juan Pérez" />
+                <label class="label">Responsable (catálogo) <span class="req">*</span></label>
+                <select class="input" v-model.number="f.personalId">
+                  <option :value="null">(Selecciona personal)</option>
+                  <option v-for="p in personal" :key="p.id" :value="p.id">
+                    {{ p.nombre }} — {{ p.rfc }} — {{ p.puesto }}
+                  </option>
+                </select>
               </div>
 
               <div>
-                <label class="label">
-                  RFC <span class="req">*</span>
-                </label>
-                <input class="input" v-model.trim="f.rfc" placeholder="Ej. HERR990126P1" />
+                <label class="label">RFC <span class="req">*</span></label>
+                <input class="input" :value="f.rfc" disabled />
+              </div>
+
+              <div class="md:col-span-2">
+                <label class="label">Puesto del responsable</label>
+                <input class="input" :value="f.responsablePuesto" disabled />
               </div>
             </div>
           </section>
@@ -382,7 +388,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, computed, ref } from 'vue';
+import { onMounted, reactive, computed, ref, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import axios from 'axios';
 axios.defaults.withCredentials = true;
@@ -405,6 +411,8 @@ const f = reactive({
   noInventario: '',
   nombre: '',
   responsable: '',
+  personalId: null as number | null,
+  responsablePuesto: '',
   rfc: '',
   noFactura: '',
   fechaAdjudicacion: '',
@@ -530,6 +538,8 @@ async function loadIfEdit(){
   f.nombre             = data.nombre ?? '';
   f.responsable        = data.responsable ?? '';
   f.rfc                = data.rfc ?? '';
+  f.personalId         = data.personalId ?? null;
+  f.responsablePuesto  = data.personal?.puesto ?? data.responsablePuesto ?? '';
   f.noFactura          = data.no_factura ?? '';
   f.fechaAdjudicacion  = data.fecha_adjudicacion?.substring(0,10) ?? '';
   f.modelo             = data.modelo ?? '';
@@ -551,10 +561,38 @@ async function loadIfEdit(){
 
 }
 
+type Personal = { id:number; nombre:string; rfc:string; puesto:string };
+const personal = reactive<Personal[]>([]);
+
+async function loadPersonal(){
+  const { data } = await axios.get<Personal[]>('/api/personal');
+  personal.splice(0, personal.length, ...(Array.isArray(data) ? data : []));
+}
+
+watch(() => f.personalId, (id) => {
+  if (!id) {
+    f.responsable = '';
+    f.rfc = '';
+    f.responsablePuesto = '';
+    return;
+  }
+  const p = personal.find(x => x.id === id);
+  if (!p) return;
+  f.responsable = p.nombre;
+  f.rfc = p.rfc;
+  f.responsablePuesto = p.puesto;
+});
+
+
 async function onSubmit() {
   if (saving.value) return; // ✅ evita doble submit
 
   // Validación mínima
+  if (!f.personalId) {
+    alert('Selecciona un responsable del catálogo');
+    return;
+  }
+
   if (!f.noInventario.trim() || !f.nombre.trim()) {
     alert('No. inventario y nombre son obligatorios');
     return;
@@ -568,11 +606,16 @@ async function onSubmit() {
     return;
   }
 
+  const costoRaw = String(f.costoAdquisicion ?? '').trim();
+
+
   const payload = {
     no_inventario:      f.noInventario.trim(),
     nombre:             f.nombre.trim(),
     responsable:        f.responsable.trim(),
     rfc:                f.rfc.trim(),
+    responsablePuesto:  f.responsablePuesto || null,
+    personalId:         f.personalId,
     no_factura:         f.noFactura.trim() || null,
     fecha_adjudicacion: toISODate(f.fechaAdjudicacion),
     modelo:             f.modelo.trim() || null,
@@ -586,7 +629,7 @@ async function onSubmit() {
     estadoId:           f.estadoId ?? null,
     ubicacionId:        f.ubicacionId ?? null,
 
-    costo_adquisicion:  f.costoAdquisicion ? Number(f.costoAdquisicion) : null,
+    costo_adquisicion: costoRaw !== '' ? Number(costoRaw) : null,
     tipoPropiedad:      f.tipoPropiedad || null,
     proveedorId:        f.proveedorId ?? null,
 
@@ -611,10 +654,14 @@ async function onSubmit() {
   }
 }
 
-onMounted(async ()=>{
-  await loadCatalogs();
+onMounted(async () => {
+  const results = await Promise.allSettled([loadCatalogs(), loadPersonal()]);
+  const personalOk = results[1].status === 'fulfilled';
+  if (!personalOk) console.warn('No se pudo cargar /api/personal');
   await loadIfEdit();
 });
+
+
 </script>
 
 <style scoped>
